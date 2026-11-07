@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#fcfaf6">
+  <title>知伴 · 生活助手</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/brand.svg">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="brand-mark" viewBox="0 0 48 48"><rect x="1" y="1" width="46" height="46" rx="14" fill="#a8432b"/><path d="M12 15c0-2 1.7-3.5 3.7-3.5h16.6c2 0 3.7 1.5 3.7 3.5v13c0 2-1.7 3.5-3.7 3.5h-8.8l-7.8 5v-5c-2.2 0-3.7-1.5-3.7-3.5z" fill="#fff8e9"/><path d="M18 21.6v2.3m4-5.7v9m4-10.8v12.5m4-9.9v7" fill="none" stroke="#a8432b" stroke-width="2.25" stroke-linecap="round"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"/></symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 11.4a8.7 8.7 0 0 1-9.2 8.6 12 12 0 0 1-3.5-.6l-5 1.5 1.5-4.7a8.2 8.2 0 0 1-1.6-4.8 8.8 8.8 0 0 1 17.8 0Z"/><path d="M8.3 10.2h7.4m-7.4 3.5h4.2"/></symbol>
+      <symbol id="i-health" viewBox="0 0 24 24"><path d="M20.8 4.9a5.4 5.4 0 0 0-7.6 0L12 6.1l-1.2-1.2a5.4 5.4 0 1 0-7.6 7.7l8 8a1.1 1.1 0 0 0 1.6 0l8-8a5.4 5.4 0 0 0 0-7.7Z"/><path d="M3.6 12h4.1l2-3.8 3.2 7 1.8-3.2h5.7"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><path d="m14 3 .7 2a7 7 0 0 1 1.6.9l2.1-.4 1.9 3.2-1.4 1.6a7 7 0 0 1 0 1.9l1.4 1.6-1.9 3.2-2.1-.4a7 7 0 0 1-1.6.9l-.7 2h-3.8l-.7-2a7 7 0 0 1-1.6-.9l-2.1.4-1.9-3.2 1.4-1.6a7 7 0 0 1 0-1.9L3.9 8.7l1.9-3.2 2.1.4A7 7 0 0 1 9.5 5l.7-2Z" transform="translate(0 1)"/><circle cx="12.1" cy="12.4" r="2.9"/></symbol>
+      <symbol id="i-font" viewBox="0 0 24 24"><path d="m2 18 5.1-12L12 18m-8.5-3.4h6.8m3.2-4h8.7m-4.3 0v8.8"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><rect x="8.3" y="2.3" width="7.4" height="12.3" rx="3.7"/><path d="M5.1 10.8v.9a6.9 6.9 0 0 0 13.8 0v-.9M12 18.6v3.1m-3.7 0h7.4"/></symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24"><path d="m8.5 5.8 1.2-2h4.6l1.2 2h3.8A1.7 1.7 0 0 1 21 7.5v10.8a1.7 1.7 0 0 1-1.7 1.7H4.7A1.7 1.7 0 0 1 3 18.3V7.5a1.7 1.7 0 0 1 1.7-1.7Z"/><circle cx="12" cy="12.8" r="3.5"/></symbol>
+      <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M5.5 9h.2m3-.1h.2m3-.1h.2m3-.1h.2m3-.1h.2m-13 3.3h.2m3-.1h.2m3-.1h.2m3-.1h.2m3-.1h.2m-10 3.2h6.3"/></symbol>
+      <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="m4 11 15-7-5 16-2.6-6.8L4 11Z"/><path d="m11.4 13.2 7.1-8.7"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10" width="15" height="11" rx="2.4"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/></symbol>
+      <symbol id="i-hint" viewBox="0 0 24 24"><path d="M9 16c-.4-2.3-3-3.3-3-6.8a6 6 0 0 1 12 0c0 3.5-2.6 4.5-3 6.8zm.5 3h5m-4 2.6h3"/></symbol>
+      <symbol id="i-volume" viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3zm12 0a4 4 0 0 1 0 6m2.5-9a8 8 0 0 1 0 12"/></symbol>
+      <symbol id="i-note" viewBox="0 0 24 24"><rect x="4.5" y="3" width="15" height="18" rx="2"/><path d="M8 8h8m-8 4h8m-8 4h4"/></symbol>
+    </defs>
+  </svg>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <button type="button" class="brand" data-nav="home" aria-label="知伴生活助手首页">
+        <svg class="brand-icon" aria-hidden="true"><use href="#brand-mark"/></svg><span class="brand-name">知伴</span><span class="brand-divider" aria-hidden="true"></span><span class="brand-sub">生活助手</span>
+      </button>
+      <nav class="main-nav" aria-label="主要导航">
+        <button type="button" data-nav="home" aria-current="page"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-home"/></svg><span>首页</span></button>
+        <button type="button" data-nav="chat"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chat"/></svg><span>聊天</span></button>
+        <button type="button" data-nav="health"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-health"/></svg><span>健康记录</span></button>
+      </nav>
+      <div class="utilities">
+        <button type="button" class="utility" data-action="font" aria-label="切换字号"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-font"/></svg><span id="font-toggle-state">字号</span></button>
+        <button type="button" class="utility" data-nav="settings"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-settings"/></svg><span>设置</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content" id="main-content" tabindex="-1">
+    <section class="home-view app-view" data-view="home" aria-labelledby="home-title">
+      <div class="page-intro home-intro">
+        <div><h1 id="home-title">您好，有什么想问的？</h1><p>生活里的问题，随时问知伴。</p></div>
+        <span id="today-date" class="today-date"></span>
+      </div>
+      <div id="home-service-setup" class="setup-note" hidden><span>首次使用，请先连接问答服务。</span><button type="button" class="link-button" data-nav="settings">去设置<svg class="icon" aria-hidden="true" focusable="false"><use href="#i-right"/></svg></button></div>
+      <div id="health-due-home" class="due-home" hidden></div>
+      <section class="voice-hero" aria-labelledby="voice-heading">
+        <div class="hero-photo" aria-hidden="true"></div>
+        <div class="voice-copy">
+          <h2 id="voice-heading">语音聊天</h2>
+          <p>直接说出您的问题，听知伴回答。</p>
+          <button class="primary-button hero-button" type="button" data-action="voice"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-mic"/></svg>开始说话</button>
+        </div>
+      </section>
+
+      <div class="action-grid" aria-label="其他常用功能">
+        <button type="button" class="action-card" data-action="photo">
+          <span class="action-icon photo-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-camera"/></svg></span>
+          <span class="action-text"><strong>拍照提问</strong><span>拍照或选图，选好就会发送。</span></span>
+          <svg class="card-arrow icon" aria-hidden="true" focusable="false"><use href="#i-right"/></svg>
+        </button>
+        <button type="button" class="action-card" data-action="type">
+          <span class="action-icon type-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-keyboard"/></svg></span>
+          <span class="action-text"><strong>打字提问</strong><span>写下您想问的事。</span></span>
+          <svg class="card-arrow icon" aria-hidden="true" focusable="false"><use href="#i-right"/></svg>
+        </button>
+        <button type="button" class="action-card" data-nav="health">
+          <span class="action-icon health-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-health"/></svg></span>
+          <span class="action-text"><strong>健康记录</strong><span>记下身体情况，查看回访。</span></span>
+          <svg class="card-arrow icon" aria-hidden="true" focusable="false"><use href="#i-right"/></svg>
+        </button>
+      </div>
+
+      <section class="suggestions" aria-labelledby="prompt-heading">
+        <h2 id="prompt-heading"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-hint"/></svg>可以这样问</h2>
+        <div class="prompt-grid">
+          <button type="button" data-prompt="手机里的照片怎么发给朋友？">手机照片怎么发给朋友？<svg class="icon" aria-hidden="true" focusable="false"><use href="#i-right"/></svg></button>
+          <button type="button" data-prompt="蒸鸡蛋羹，怎么做更嫩？">鸡蛋羹怎么蒸更嫩？<svg class="icon" aria-hidden="true" focusable="false"><use href="#i-right"/></svg></button>
+          <button type="button" data-prompt="在家量血压，要注意什么？">在家量血压要注意什么？<svg class="icon" aria-hidden="true" focusable="false"><use href="#i-right"/></svg></button>
+        </div>
+      </section>
+    </section>
+
+    <section class="app-view chat-view" data-view="chat" aria-labelledby="chat-title" hidden>
+      <div class="page-intro section-heading">
+        <div><h1 id="chat-title">和知伴聊聊</h1><p>可以说话、发照片，也可以打字。</p></div>
+        <button type="button" class="secondary-button" data-action="new-chat"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"/></svg>新聊天</button>
+      </div>
+      <div class="chat-box">
+        <div id="chat-messages" class="chat-messages" role="log" aria-label="聊天内容" aria-live="polite"></div>
+        <div id="chat-status" class="chat-status" role="status"></div>
+        <div id="voice-panel" class="voice-panel" hidden>
+          <svg class="icon" aria-hidden="true"><use href="#i-mic"/></svg><span id="voice-status" role="status">正在听，请说…</span>
+          <button type="button" class="primary-button" data-action="finish-voice">说好了</button><button type="button" class="secondary-button" data-action="cancel-voice">取消</button>
+        </div>
+        <form id="chat-form" class="composer">
+          <div id="chat-attachment" class="chat-attachment" hidden></div>
+          <label class="sr-only" for="chat-text">您的问题</label>
+          <textarea id="chat-text" rows="2" placeholder="写下您想问的事…" enterkeyhint="send"></textarea>
+          <div class="composer-actions">
+            <button type="button" class="compose-action" data-action="voice"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-mic"/></svg>说话</button>
+            <button type="button" class="compose-action" data-action="photo"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-camera"/></svg>发照片</button>
+            <button id="chat-send" type="submit" class="primary-button send-button"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-send"/></svg>发送</button>
+          </div>
+        </form>
+      </div>
+      <p class="privacy-note chat-privacy"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"/></svg>发送后，问答服务会将文字、照片或语音交给阿里云百炼处理。</p>
+    </section>
+
+    <section class="app-view journal-view" data-view="health" aria-labelledby="health-title" hidden>
+      <div class="page-intro"><h1 id="health-title">健康记录</h1><p>记自己的身体情况，回头可以接着聊。</p></div>
+      <div class="journal-grid">
+        <section class="panel journal-form-panel">
+          <h2><span class="small-icon health-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-note"/></svg></span>记一条</h2>
+          <form id="manual-health-form">
+            <label for="manual-health-note">今天身体怎么样？</label>
+            <textarea id="manual-health-note" rows="3" required placeholder="例如：我今天早上量的血压是……"></textarea>
+            <button class="primary-button" type="submit">保存这条记录</button>
+          </form>
+        </section>
+        <section class="panel followup-panel"><h2><span class="small-icon photo-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chat"/></svg></span>健康回访</h2><div id="upcoming-followups" class="followup-list"></div></section>
+      </div>
+      <div id="native-reminder-region" class="panel" hidden><label class="setting-row"><span><strong>到时间在手机上提醒我</strong></span><input type="checkbox" id="native-reminders" class="switch"></label></div>
+      <section class="panel records-panel"><h2>我的记录</h2><div id="health-records" class="record-list"></div></section>
+      <p class="privacy-note"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"/></svg>健康记录保存在当前设备。<button type="button" class="link-button" data-nav="settings">管理设置</button></p>
+    </section>
+
+    <section class="app-view settings-view" data-view="settings" aria-labelledby="settings-title" hidden>
+      <div class="page-intro"><h1 id="settings-title">设置</h1><p>调整朗读和健康记录，或连接问答服务。</p></div>
+      <form id="settings-form" class="settings-form">
+        <section class="panel"><h2>使用习惯</h2>
+          <label class="setting-row"><span><strong>自动朗读文字回答</strong><small>开启后，打字提问也会读出回答。</small></span><input id="auto-read" type="checkbox" class="switch"></label>
+          <label class="setting-row"><span><strong>自动记下我明确说出的身体情况</strong><small>开启后，只在这台设备保存。单独发图时，会先问您。</small></span><input id="health-consent" type="checkbox" class="switch"></label>
+          <label for="health-days" class="setting-row select-row"><span><strong>新记录的回访间隔</strong><small>已有记录的提醒，可在健康记录里单独调整。</small></span>
+            <select id="health-days"><option value="1">每天</option><option value="3" selected>每 3 天</option><option value="7">每 7 天</option><option value="0">关闭回访</option></select>
+          </label>
+        </section>
+        <section class="panel"><h2>问答服务</h2>
+          <div id="family-access" hidden>
+            <label for="family-code" class="field-label">家庭服务码</label><p class="field-help">由开通这项服务的家人提供。</p>
+            <input id="family-code" type="password" autocapitalize="none" spellcheck="false" autocomplete="off">
+            <label class="setting-row"><span>在这台设备上记住家庭服务（30 天）</span><input type="checkbox" id="remember-family" class="switch"></label>
+            <button type="button" id="forget-family" class="link-button">清除家庭服务码</button>
+          </div>
+          <label for="api-key" class="field-label">阿里云百炼 API Key（服务密钥）</label>
+          <p id="key-help" class="field-help">可请家人协助填写。使用自己的密钥时，费用计入对应的百炼账户。</p>
+          <input id="api-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="key-help" placeholder="输入服务密钥">
+          <button type="button" class="link-button forget-key" data-action="forget-key">清除本次密钥</button>
+        </section>
+        <div class="settings-footer"><button id="save-settings" type="submit" class="primary-button">保存设置</button><span id="settings-status" role="status"></span></div>
+      </form>
+    </section>
+  </main>
+
+  <input type="file" id="photo-input" accept="image/*" hidden>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <dialog id="privacy-consent-dialog" aria-labelledby="consent-title" aria-describedby="consent-body">
+    <div class="dialog-inner"><span class="action-icon health-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"/></svg></span>
+      <h2 id="consent-title">保存自己的健康记录</h2><p id="consent-body">身体情况会保存在这台设备。用这台设备打开知伴的人可以看到，您可以随时删除记录。</p>
+      <div class="dialog-actions"><button id="consent-accept" class="primary-button" type="button">同意保存</button><button id="consent-decline" class="secondary-button" type="button">暂不保存</button></div>
+    </div>
+  </dialog>
+  <dialog id="new-chat-dialog" aria-labelledby="new-chat-title">
+    <div class="dialog-inner"><h2 id="new-chat-title">开始新的聊天？</h2><p>开始后，将清空当前聊天内容。</p>
+      <div class="dialog-actions"><button id="new-chat-confirm" type="button" class="primary-button">开始新聊天</button><button id="new-chat-cancel" type="button" class="secondary-button">继续聊</button></div>
+    </div>
+  </dialog>
+</body>
+</html>

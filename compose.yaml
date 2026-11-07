@@ -1,0 +1,32 @@
+services:
+  app:
+    build: .
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8787
+      PUBLIC_ORIGIN: https://${APP_DOMAIN:?set APP_DOMAIN in .env}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      FAMILY_ACCESS_CODE: ${FAMILY_ACCESS_CODE:-}
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+  gateway:
+    image: caddy:2-alpine
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+volumes:
+  caddy_data:
+  caddy_config:

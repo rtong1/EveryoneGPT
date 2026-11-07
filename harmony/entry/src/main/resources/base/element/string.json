@@ -1,0 +1,6 @@
+{
+  "string": [
+    { "name": "description", "value": "用说话、图片或文字提问，查看自己的健康记录。" },
+    { "name": "microphone_reason", "value": "您点说话时，用麦克风录下要问的问题。" }
+  ]
+}
