@@ -2,37 +2,32 @@
 
 给习惯说话、拍照的人用的中文生活助手。打开首页就能说话、选照片提问或打字。网页和鸿蒙客户端使用同一个界面与家庭服务。
 
-## 主模型（2026-11-07）
+## 问答和新话题
 
-文字与图片使用同一个旗舰模型，服务端通过 `MODEL_PROVIDER` 选择，调用失败会提示重试。
+文字与图片统一使用 OpenAI 官方 GPT-6 Astra（`gpt-6-astra`）。服务端按问题和最近的追问选用低、中或高推理强度。简单操作和释义优先快速回答，健康读数、用药、图片和多条件比较会用较高强度。用户直接说话、拍照或打字即可。推理强度和话题提示均按本地规则判断，每轮只请求一次问答模型。[模型说明](https://developers.openai.com/api/docs/models/gpt-6-astra)
 
-| 服务范围 | 配置 | 问答与图片 | 云端语音 |
-|---|---|---|---|
-| 北京百炼，默认 | `MODEL_PROVIDER=dashscope`，可配 `DASHSCOPE_API_KEY` | Qwen3.8-Max | 百炼识别和朗读 |
-| OpenAI 官方支持地区 | `MODEL_PROVIDER=openai`，可配 `OPENAI_API_KEY` | ChatGPT 最新 Instant（chat-latest） | GPT-Transcribe 和 GPT-4o mini TTS |
+聊天达到四轮或最近内容较长时，如果用户提出了不同主题，发送前会询问“在新聊天里问”还是“接着聊”。另开后只发送当前问题和附图，旧聊天折叠在本页，可展开回看。接着聊会保留最近的上下文，接下来三轮不重复提示。每次请求最多附上最近五轮完整问答及两张图片，并按估算的输入量裁剪历史。关闭或刷新页面会清除聊天。
 
-OpenAI 默认 `chat-latest` 随官方更新，指向 ChatGPT 最新 Instant 聊天模型。希望固定使用官方最高智能型号时设置 `OPENAI_CHAT_MODEL=gpt-6-astra`。也可选择 6.1 系列，设置 `OPENAI_CHAT_MODEL=gpt-6.1-sol` 或 `gpt-6.1-terra`，重启后可在设置页核对。
-
-在项目目录复制 `.env.example` 为 `.env`，选择服务商，重启应用。也可在网页中填入所选服务商的个人密钥。设置页显示实际模型。OpenAI 模式适用于其支持地区；中国大陆不在该名单。后文的北京地域、密钥与费用说明适用于百炼模式。发布新旗舰时需核对 API 与图像兼容性并更新型号。
+语音转文字和云端朗读同样使用 OpenAI 官方 API，设备具备中文语音时优先在本机朗读。
 
 ## 先在电脑上用
 
 1. 解压整个项目。Mac 上双击 **启动知伴.command**。Windows 或 Linux 在解压目录打开终端，运行 `node server.mjs`，再用浏览器打开 **http://127.0.0.1:8787/**。运行需要 Node.js 22.12 或更新版本，无需安装第三方软件包。
-2. 家人打开 **设置 → 问答服务**，填写阿里云百炼 **华北 2（北京）** 地域的按量付费 API Key，保存后就可以提问。个人密钥只用于这次页面会话。家庭长期使用可按下一节把密钥放在服务端。
+2. 家人打开 **设置 → 问答服务**，填写OpenAI API Key，保存后就可以提问。个人密钥只用于这次页面会话。家庭长期使用可按下一节把密钥放在服务端。
 3. 点 **开始说话**，允许麦克风，说完点 **说好了**。知伴会回答并朗读；系统要求手动播放时，点播放即可。点 **拍照提问**，在相册确认所选照片后，知伴就会看图回答，文字可以留空。点 **字号** 可切换大字。
 
-在本机使用服务端密钥时，将 `.env.example` 复制成 `.env`，填写 `DASHSCOPE_API_KEY`。Mac 启动器会读取这个文件；其他系统运行 `node --env-file=.env server.mjs`。保留默认的本机监听地址，只有这台电脑能使用这项本机配置。
+在本机使用服务端密钥时，将 `.env.example` 复制成 `.env`，填写 `OPENAI_API_KEY`。Mac 启动器会读取这个文件；其他系统运行 `node --env-file=.env server.mjs`。保留默认的本机监听地址，只有这台电脑能使用这项本机配置。
 
-百炼为地域分别发放密钥。文字、图片、语音识别和云端朗读按各自模型的规则计费；设备有可用中文语音时优先使用设备朗读。[获取密钥](https://help.aliyun.com/zh/model-studio/get-api-key) · [模型价格](https://help.aliyun.com/zh/model-studio/model-pricing)
+ChatGPT 订阅与 API 分开计费。知伴使用 OpenAI API 账户的额度，由家人统一配置密钥或使用个人密钥。[获取密钥](https://platform.openai.com/api-keys) · [API 价格](https://openai.com/api/pricing/) · [计费说明](https://help.openai.com/en/articles/9039756-managing-billing-for-chatgpt-and-the-api-platform)
 
-## 让家人在国内手机上直接打开
+## 在手机上使用家庭服务
 
-把网页和服务部署在同一台可从国内访问的服务器上。浏览器只连接家庭网址，模型请求由服务器发往百炼北京接口。网页字体、图标和图片随项目提供。
+将网页和服务部署在同一 HTTPS 域名下。手机连接家庭网址，家庭服务器调用 OpenAI 官方 API。中国大陆目前不在 OpenAI API 支持地区名单内；将服务器部署在海外不会改变官方对提供服务地区的要求。[官方支持地区](https://help.openai.com/en/articles/5347006-openai-api-supported-countries-and-territories)
 
 **使用随包的 Docker 部署配置**（由管理服务器的家人操作）
 
-1. 将自己的域名指向大陆服务器，准备好域名接入，并开放 TCP 80、443 端口。服务器需有 Docker 和 Compose。
-2. 在服务器上解压项目，将 `.env.example` 复制成 `.env`。把 `APP_DOMAIN` 填为实际域名，只写域名。将北京地域的密钥填入 `DASHSCOPE_API_KEY`，在 `FAMILY_ACCESS_CODE` 中设置一个随机家庭口令（12 至 512 个字符）。例如可用 `openssl rand -hex 16` 生成。在 Linux 上运行 `chmod 600 .env`，让该文件仅对所属用户可读写。
+1. 将自己的域名指向家庭服务所在的服务器，准备好域名接入，并开放 TCP 80、443 端口。服务器需有 Docker 和 Compose。
+2. 在服务器上解压项目，将 `.env.example` 复制成 `.env`。把 `APP_DOMAIN` 填为实际域名，只写域名。将 OpenAI API 密钥填入 `OPENAI_API_KEY`，在 `FAMILY_ACCESS_CODE` 中设置一个随机家庭口令（12 至 512 个字符）。例如可用 `openssl rand -hex 16` 生成。在 Linux 上运行 `chmod 600 .env`，让该文件仅对所属用户可读写。
 3. 在项目目录运行 `docker compose up -d --build`。Caddy 负责 HTTPS，把同一域名下的网页和接口转给应用。也可沿用现有 HTTPS 网关，保留原 Host，在应用环境设置 `PUBLIC_ORIGIN=https://你的实际域名` 和对应的监听地址。
 4. 用手机流量打开家庭 HTTPS 网址。首次由家人在设置中输入家庭服务码（部署时设置的家庭口令），并按需记住这台设备；之后长辈直接使用。记住的登录有效期为 30 天。更换服务端家庭口令并重启服务会使已有设备登录失效。
 5. 先用一张普通生活照片和一句语音验证看图、语音识别、朗读，再开启个人健康记录。模型服务费用归服务端密钥所属账户。
@@ -48,17 +43,15 @@ OpenAI 默认 `chat-latest` 随官方更新，指向 ChatGPT 最新 Instant 聊�
 | “我爸刚量了血压，138/82。” | 就这次提问回答，不写进提问者本人的健康记录。 |
 | 只发血压计或检查单的照片 | 解读能看清的内容。记入本人的记录时，由使用者确认归属与数值。 |
 
-健康记录留在当前设备的当前浏览器或客户端里。聊天内容在当前页面会话中使用。调用问答、识图、语音识别或云端朗读时，所需内容会经过家庭服务发送给设置中注明的服务商。网页与鸿蒙端分别保存本机记录；清除浏览器数据、清除应用数据或卸载可能一并删除记录。共用一台设备的人可以看到其中的健康本。
+健康记录留在当前设备的当前浏览器或客户端里。聊天内容在当前页面会话中使用。调用问答、识图、语音识别或云端朗读时，所需内容会经过家庭服务发送给 OpenAI。网页与鸿蒙端分别保存本机记录；清除浏览器数据、清除应用数据或卸载可能一并删除记录。共用一台设备的人可以看到其中的健康本。
 
 到期后再打开知伴，可以填写近况、改日再问或停止回访。提醒内容和通知能否在关闭应用后出现，取决于日历或鸿蒙通知授权。这里提供的是根据用户自己填写的信息进行回访，不连接血压计或手表进行实时测量。
 
 ## 开发与验证
 
 - `web/` 包含适老界面、图片处理、录音、朗读、健康记录与回访逻辑。
-- `server/` 实现 OpenAI 与北京百炼的问答、语音识别、朗读和家庭访问接口。`server.mjs` 提供静态网页及这些接口。
+- `server/` 实现 OpenAI 官方 API 的问答、语音识别、朗读和家庭访问接口。`server.mjs` 提供静态网页及这些接口。
 - `harmony/` 是用于 HarmonyOS 的 DevEco Studio 工程。
-- 运行 `node --test tests/*.test.mjs` 检查健康归属、语音录入等逻辑。接口测试使用模拟的云端响应，实际模型效果和费用由连接的百炼账户决定。
-
-ChatGPT 与 OpenAI API 有各自的计费体系。部分符合条件的 ChatGPT 订阅可领取 OpenAI API 额度，该额度用于其关联的 OpenAI API 账户。知伴国内版使用百炼账户结算。[OpenAI 计费](https://help.openai.com/en/articles/9039756-managing-billing-for-chatgpt-and-the-api-platform) · [订阅额度说明](https://developers.openai.com/api/docs/guides/chatgpt-api-credits) · [OpenAI API 支持地区](https://help.openai.com/en/articles/5347006-openai-api-supported-countries-and-territories)
+- 运行 `node --test tests/*.test.mjs` 检查健康归属、语音录入等逻辑。接口测试使用模拟的云端响应，实际调用计入所用 OpenAI API 账户。
 
 随包配置面向家庭试用。准备对公众运营时，服务提供者还需办理适用的网站或应用备案、生成式 AI 服务登记及相关公示。[网信办生成式 AI 服务公告](https://www.cac.gov.cn/2026-09/14/c_1791136833136332.htm)

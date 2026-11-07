@@ -5,10 +5,7 @@ services:
       HOST: 0.0.0.0
       PORT: 8787
       PUBLIC_ORIGIN: https://${APP_DOMAIN:?set APP_DOMAIN in .env}
-      MODEL_PROVIDER: ${MODEL_PROVIDER:-dashscope}
-      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-chat-latest}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
       FAMILY_ACCESS_CODE: ${FAMILY_ACCESS_CODE:-}
     restart: unless-stopped
     read_only: true

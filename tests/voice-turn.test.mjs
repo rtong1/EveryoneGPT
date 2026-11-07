@@ -39,14 +39,13 @@ test('a captured voice turn reaches the recognizer as mono 16 kHz PCM and releas
   assert.ok(trackStopped && contextClosed);
   const request = new Request('https://family.example/api/transcribe', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-only-key' },
+    headers: { 'Content-Type': 'application/json', 'X-Model-Provider': 'openai', Authorization: 'Bearer test-only-key' },
     body: JSON.stringify({ audio })
   });
   const response = await handleApi(request, {}, {
     fetcher: async (url, init) => {
-      assert.equal(new URL(url).hostname, 'dashscope.aliyuncs.com');
-      const data = JSON.parse(init.body).messages[0].content[0].input_audio.data;
-      const bytes = Buffer.from(data.split(',')[1], 'base64');
+      assert.equal(url, 'https://api.openai.com/v1/audio/transcriptions');
+      const bytes = Buffer.from(await init.body.get('file').arrayBuffer());
       assert.equal(bytes.toString('ascii', 0, 4), 'RIFF');
       assert.equal(bytes.readUInt16LE(22), 1);
       assert.equal(bytes.readUInt32LE(24), 16000);
@@ -54,7 +53,7 @@ test('a captured voice turn reaches the recognizer as mono 16 kHz PCM and releas
       assert.equal(bytes.readUInt32LE(40), 16000);
       assert.equal(bytes.length, 16044);
       assert.ok(bytes.readInt16LE(44) > 0);
-      return Response.json({ choices: [{ message: { content: '帮我看看照片。' } }] });
+      return Response.json({ text: '帮我看看照片。' });
     }
   });
   assert.equal(response.status, 200);

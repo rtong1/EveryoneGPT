@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { handleApi } from '../server/api.mjs';
 
 const origin = 'https://chat.example.cn';
-const env = { DASHSCOPE_API_KEY: 'example-service-credential', FAMILY_ACCESS_CODE: 'sample-household-phrase' };
+const env = { OPENAI_API_KEY: 'example-service-credential', FAMILY_ACCESS_CODE: 'sample-household-phrase' };
 const auth = { Authorization: 'Bearer example-user-credential' };
 const providerReply = { choices: [{ message: { content: '请点右上角的设置。' } }] };
 function req(path, body, headers = {}, method = body ? 'POST' : 'GET') {
-  const opts = { method, headers: { Origin: origin, ...headers } };
+  const opts = { method, headers: { Origin: origin, 'X-Model-Provider':'openai', ...headers } };
   if (body) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
@@ -17,7 +17,7 @@ function req(path, body, headers = {}, method = body ? 'POST' : 'GET') {
 const disposablePhoto = 'data:image/jpeg;base64,/9j/2Q==';
 const question = { messages: [{ role: 'user', text: '在哪里设置？' }] };
 
-test('a photo alone, previous turns, and BYOK reach the documented Beijing chat endpoint', async () => {
+test('a photo alone, previous turns, and BYOK reach the official OpenAI chat endpoint', async () => {
   let observed;
   const fetcher = async (url, init) => {
     observed = { url, ...init, body: JSON.parse(init.body) };
@@ -26,7 +26,7 @@ test('a photo alone, previous turns, and BYOK reach the documented Beijing chat 
   const messages = [...question.messages, { role: 'assistant', text: '打开设置。' }, { role: 'user', image: disposablePhoto }];
   const reply = await handleApi(req('/api/chat', { messages }, auth), env, { fetcher });
   assert.equal((await reply.json()).text, providerReply.choices[0].message.content);
-  assert.equal(observed.url, 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions');
+  assert.equal(observed.url, 'https://api.openai.com/v1/chat/completions');
   assert.equal(observed.headers.Authorization, auth.Authorization);
   assert.equal(observed.body.messages[0].role, 'system');
   assert.deepEqual(observed.body.messages[2], { role: 'assistant', content: '打开设置。' });
@@ -41,7 +41,7 @@ test('rejects remote media, system role injection, oversized body, keyless publi
   }
   const oversized = req('/api/chat', question, { ...auth, 'content-length': String(10 * 1024 * 1024) });
   assert.equal((await handleApi(oversized, {}, { fetcher: denied })).status, 413);
-  assert.equal((await handleApi(req('/api/chat', question), { DASHSCOPE_API_KEY: env.DASHSCOPE_API_KEY }, { fetcher: denied })).status, 401);
+  assert.equal((await handleApi(req('/api/chat', question), { OPENAI_API_KEY: env.OPENAI_API_KEY }, { fetcher: denied })).status, 401);
   const response = await handleApi(req('/api/chat', question, auth), {}, {
     fetcher: async () => new Response(auth.Authorization, { status: 401 })
   });
@@ -51,7 +51,7 @@ test('rejects remote media, system role injection, oversized body, keyless publi
 
 test('family authorization is temporary or device-bound by cookie; rotation and sign-out clear access', async () => {
   const fetcher = async (url, init) => {
-    assert.equal(init.headers.Authorization, 'Bearer ' + env.DASHSCOPE_API_KEY);
+    assert.equal(init.headers.Authorization, 'Bearer ' + env.OPENAI_API_KEY);
     return Response.json(providerReply);
   };
   const config = async (headers = {}, options = env) => (await handleApi(req('/api/config', null, headers), options)).json();
@@ -96,78 +96,51 @@ test('only structured readings matching visible digits in a photo answer are off
   assert.equal((await run({ text: '这张照片有反光。', reading: null, readingUnclear: true })).readingUnclear, true);
 });
 
-test('speech recognition forwards a data URI; synthesis downloads its WAV over HTTPS without the user key', async () => {
-  const wav = new Uint8Array(46);
-  const view = new DataView(wav.buffer);
-  for (const [offset, value] of [[0, 'RIFF'], [8, 'WAVE'], [12, 'fmt '], [36, 'data']]) {
-    wav.set(new TextEncoder().encode(value), offset);
+test('each question uses the same model, with server-selected effort and one upstream call', async () => {
+  const config = await (await handleApi(req('/api/config'), env)).json();
+  assert.equal(config.provider, 'openai');
+  assert.equal(config.model, 'gpt-6-astra');
+  for (const [question, expected] of [
+    [{text: '怎么打开手机相册？'}, 'low'], [{text: '周末我想带家人出去走走'}, 'medium'],
+    [{text: '帮我比较这两个解决办法'}, 'high'], [{image: disposablePhoto}, 'high']
+  ]) {
+    const messages = [{role: 'user', ...question}];
+    let calls = 0;
+    const reply = await handleApi(req('/api/chat', {messages, model:'other', reasoning_effort:'max'}, auth), {}, {
+      fetcher: async (url, init) => {
+        calls++;
+        assert.equal(url, 'https://api.openai.com/v1/chat/completions');
+        const input = JSON.parse(init.body);
+        assert.equal(input.model, config.model);
+        assert.equal(input.reasoning_effort, expected);
+        assert.equal(input.store, false);
+        return Response.json(question.image ? {choices:[{message:{content:'{"text":"照片","reading":null}'}}]} : providerReply);
+      }
+    });
+    assert.equal(reply.status, 200);
+    assert.equal(calls, 1);
   }
-  for (const [offset, value] of [[4, 38], [16, 16], [24, 16000], [28, 32000], [40, 2]]) view.setUint32(offset, value, true);
-  for (const [offset, value] of [[20, 1], [22, 1], [32, 2], [34, 16]]) view.setUint16(offset, value, true);
-  const audio = 'data:audio/wav;base64,' + Buffer.from(wav).toString('base64');
-  const asr = await handleApi(req('/api/transcribe', { audio }, auth), {}, {
-    fetcher: async (_url, init) => {
-      const body = JSON.parse(init.body);
-      assert.equal(body.model, 'qwen3-asr-flash');
-      assert.equal(body.messages[0].content[0].input_audio.data, audio);
-      return Response.json({ choices: [{ message: { content: '我想问个问题' } }] });
-    }
-  });
-  assert.equal((await asr.json()).text, '我想问个问题');
-  const fileURL = 'http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/audio.wav?Signature=example';
-  const urls = [];
-  const fetcher = async (url, init) => {
-    urls.push(url);
-    if (urls.length === 1) {
-      assert.equal(JSON.parse(init.body).input.text, '我来读给您听。');
-      return Response.json({ output: { audio: { url: fileURL } } });
-    }
-    assert.equal(init.headers, undefined);
-    return new Response(wav);
-  };
-  const file = await handleApi(req('/api/speak', { text: '我来读给您听。' }, auth), {}, { fetcher });
-  assert.equal(file.headers.get('content-type'), 'audio/wav');
-  assert.deepEqual(new Uint8Array(await file.arrayBuffer()), wav);
-  assert.equal(urls[1], fileURL.replace('http:', 'https:'));
-  const blocked = await handleApi(req('/api/speak', { text: '再见。' }, auth), {}, {
-    fetcher: async () => Response.json({ output: { audio: { url: 'https://example.com/anything' } } })
-  });
-  assert.equal(blocked.status, 502);
 });
 
-test('flagship routing binds consent, image inputs and billing to the selected provider', async () => {
-  const env = { MODEL_PROVIDER: 'openai', OPENAI_API_KEY: 'openai-family-test', DASHSCOPE_API_KEY: 'unused' };
-  const bound = { ...auth, 'X-Model-Provider': 'openai' };
-  const messages = [{ role: 'user', image: disposablePhoto }];
-  const denied = () => assert.fail('must not contact provider');
-  assert.equal((await handleApi(req('/api/chat', { messages }, auth), env, { fetcher: denied })).status, 409);
-  assert.equal((await handleApi(req('/api/chat', { messages }, bound), {}, { fetcher: denied })).status, 409);
-  const config = await handleApi(req('/api/config'), env);
-  assert.equal((await config.json()).model, 'chat-latest');
-  const urls = [];
-  const fetcher = async (url, init) => {
-    urls.push(url);
-    assert.equal(init.headers.Authorization, auth.Authorization);
-    const body = JSON.parse(init.body);
-    assert.equal(body.model, 'chat-latest');
-    assert.equal(body.messages.at(-1).content[0].image_url.url, disposablePhoto);
-    assert.equal(body.enable_thinking, undefined);
-    return Response.json({ choices: [{ message: { content: '{"text":"这是通知。","reading":null}' } }] });
-  };
-  const reply = await handleApi(req('/api/chat', { messages }, bound), env, { fetcher });
-  assert.equal((await reply.json()).text, '这是通知。');
-  assert.deepEqual(urls, ['https://api.openai.com/v1/chat/completions']);
-  const mainland = await handleApi(req('/api/config'), {});
-  assert.equal((await mainland.json()).model, 'qwen3.8-max');
-  const deniedUpstream = await handleApi(req('/api/chat', question, bound), env, { fetcher: async url => {
+test('old clients must explicitly bind their key to OpenAI; upstream denials never trigger fallback', async () => {
+  for (const value of [null, 'another-service']) {
+    const request = req('/api/chat', question, auth);
+    if (value) request.headers.set('X-Model-Provider', value);
+    else request.headers.delete('X-Model-Provider');
+    const reply = await handleApi(request, {}, {fetcher: () => assert.fail('unexpected request')});
+    assert.equal(reply.status, 409);
+  }
+  let calls = 0;
+  const denied = await handleApi(req('/api/chat', question, auth), {}, {fetcher: async url => {
+    calls++;
     assert.equal(new URL(url).hostname, 'api.openai.com');
     return new Response('', {status:403});
   }});
-  assert.equal(deniedUpstream.status, 403);
+  assert.equal(denied.status, 403);
+  assert.equal(calls, 1);
 });
 
 test('OpenAI voice routes use the selected account for ASR and speech', async () => {
-  const env = { MODEL_PROVIDER: 'openai' };
   const headers = { ...auth, 'X-Model-Provider':'openai' };
   const asr = await handleApi(req('/api/transcribe', { audio: 'data:audio/wav;base64,AAAA' }, headers), env, {
     fetcher: async (url, init) => {

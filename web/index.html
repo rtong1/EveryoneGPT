@@ -99,6 +99,7 @@
         <button type="button" class="secondary-button" data-action="new-chat"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-plus"/></svg>新聊天</button>
       </div>
       <div class="chat-box">
+        <div id="previous-chats"></div>
         <div id="chat-messages" class="chat-messages" role="log" aria-label="聊天内容" aria-live="polite"></div>
         <div id="chat-status" class="chat-status" role="status"></div>
         <div id="voice-panel" class="voice-panel" hidden>
@@ -116,7 +117,7 @@
           </div>
         </form>
       </div>
-      <p class="privacy-note chat-privacy"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"/></svg>发送后，问答服务会将文字、照片或语音交给<span id="privacy-provider">当前配置的服务商</span>处理。</p>
+      <p class="privacy-note chat-privacy"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"/></svg>您发送的问题、照片或录音由 OpenAI 处理。</p>
     </section>
 
     <section class="app-view journal-view" data-view="health" aria-labelledby="health-title" hidden>
@@ -154,8 +155,8 @@
             <label class="setting-row"><span>在这台设备上记住家庭服务（30 天）</span><input type="checkbox" id="remember-family" class="switch"></label>
             <button type="button" id="forget-family" class="link-button">清除家庭服务码</button>
           </div>
-          <label for="api-key" class="field-label"><span id="model-label">问答服务</span> · API Key</label>
-          <p id="key-help" class="field-help">可请家人协助填写。使用自己的密钥时，费用计入对应的模型服务账户。</p>
+          <label for="api-key" class="field-label">OpenAI 密钥（API Key）</label>
+          <p id="key-help" class="field-help">可请家人协助填写。使用自己的密钥时，费用计入您的 OpenAI API 账户。</p>
           <input id="api-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="key-help" placeholder="输入服务密钥">
           <button type="button" class="link-button forget-key" data-action="forget-key">清除本次密钥</button>
         </section>
@@ -172,8 +173,14 @@
       <div class="dialog-actions"><button id="consent-accept" class="primary-button" type="button">同意保存</button><button id="consent-decline" class="secondary-button" type="button">暂不保存</button></div>
     </div>
   </dialog>
+  <dialog id="topic-dialog" aria-labelledby="topic-title" aria-describedby="topic-help">
+    <div class="dialog-inner"><h2 id="topic-title">换个话题，另开一段聊？</h2>
+      <p id="topic-help">另开后，知伴会单独回答这次的问题。前面聊过的内容还可以在这里查看。</p>
+      <div class="dialog-actions"><button id="topic-new" type="button" class="primary-button">在新聊天里问</button><button id="topic-continue" type="button" class="secondary-button">接着聊</button></div>
+    </div>
+  </dialog>
   <dialog id="new-chat-dialog" aria-labelledby="new-chat-title">
-    <div class="dialog-inner"><h2 id="new-chat-title">开始新的聊天？</h2><p>开始后，将清空当前聊天内容。</p>
+    <div class="dialog-inner"><h2 id="new-chat-title">开始新的聊天？</h2><p>开始后，这个页面里的聊天内容都会清空。</p>
       <div class="dialog-actions"><button id="new-chat-confirm" type="button" class="primary-button">开始新聊天</button><button id="new-chat-cancel" type="button" class="secondary-button">继续聊</button></div>
     </div>
   </dialog>

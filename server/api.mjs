@@ -1,7 +1,6 @@
-const provider = 'https://dashscope.aliyuncs.com';
-const chatPath = '/compatible-mode/v1/chat/completions';
-const speechPath = '/api/v1/services/aigc/multimodal-generation/generation';
-const chatModels = { dashscope: 'qwen3.8-max', openai: 'chat-latest' };
+import { chooseEffort } from '../web/conversation.js';
+
+const chatModel = 'gpt-6-astra';
 const familyCookie = 'zhiban_family';
 const familyLifetime = 30 * 24 * 60 * 60;
 const textEncoder = new TextEncoder();
@@ -88,7 +87,7 @@ function checkDataURL(value, allowed, maxBytes) {
   return value;
 }
 
-function chatInput(body, service, model) {
+function chatInput(body) {
   if (!Array.isArray(body.messages) || !body.messages.length || body.messages.length > 12) {
     invalid('请重新开始本轮对话。');
   }
@@ -113,20 +112,12 @@ function chatInput(body, service, model) {
   if (messages.at(-1).role !== 'user') invalid('请先告诉知伴您想问什么。');
   const photo = !!body.messages.at(-1).image;
   return {
-    model,
+    model: chatModel,
+    reasoning_effort: chooseEffort(body.messages),
     messages: [{ role: 'system', content: photo ? guide + '\n' + photoFormat : guide }, ...messages],
     ...(photo ? { response_format: { type: 'json_object' } } : {}),
-    ...(service === 'openai' ? { max_completion_tokens: 8192, store: false } : { max_tokens: 4096, ...(photo ? { enable_thinking: false } : {}) }),
+    max_completion_tokens: 8192, store: false,
     stream: false
-  };
-}
-
-function asrInput(body) {
-  const data = checkDataURL(body.audio, ['data:audio/wav;base64'], 2 * 1024 * 1024);
-  return {
-    model: 'qwen3-asr-flash', stream: false,
-    messages: [{ role: 'user', content: [{ type: 'input_audio', input_audio: { data } }] }],
-    asr_options: { enable_itn: true }
   };
 }
 
@@ -134,20 +125,15 @@ function speechInput(body) {
   if (typeof body.text !== 'string' || !body.text.trim() || Array.from(body.text).length > 600) {
     invalid('每次朗读最多600个字。');
   }
-  return { model: 'qwen3-tts-flash', input: { text: body.text.trim(), voice: 'Cherry', language_type: 'Chinese' } };
+  return body.text.trim();
 }
 
 const cloudErrors = new Map([
-  [401, [401, 'key_invalid', '服务密钥无效，请在设置中检查服务商和密钥。']],
+  [401, [401, 'key_invalid', '服务密钥无效，请在设置中检查 OpenAI 密钥。']],
   [403, [403, 'provider_denied', '该密钥没有开通此项服务，请检查模型权限和账户余额。']],
   [402, [402, 'billing', '模型账户余额不足，请检查账户计费。']],
   [429, [429, 'rate_limited', '现在使用的人较多，或账户额度已用完，请稍后再试。']]
 ]);
-
-async function callProvider(fetcher, path, key, body, signal) {
-  const response = await upstreamRequest(fetcher, provider + path, key, body, signal);
-  return response.json();
-}
 
 async function upstreamRequest(fetcher, url, key, body, signal) {
   const multipart = body instanceof FormData;
@@ -203,28 +189,7 @@ function readModelText(result, type) {
     }
     throw new ApiError(502, 'invalid_reply', '这次没能读完整张照片，请再点一次发送。');
   }
-  if (type === 'asr') throw new ApiError(422, 'empty_audio', '这次没有听清，请靠近麦克风再说一次。');
   throw new ApiError(502, 'empty_reply', '这次没有收到回答，请再发一次。');
-}
-
-async function readSpeech(fetcher, result, signal) {
-  const value = result.output?.audio?.url;
-  if (typeof value !== 'string') throw new ApiError(502, 'empty_audio', '这次没有生成声音，请再点一次朗读。');
-  const url = new URL(value);
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.port ||
-      !/^dashscope-result(-[a-z0-9]+)*\.oss-cn-beijing\.aliyuncs\.com$/.test(url.hostname)) {
-    throw new ApiError(502, 'invalid_audio', '这次没有收到可播放的声音，请再点一次朗读。');
-  }
-  url.protocol = 'https:';
-  // Signed OSS results are fetched separately. Never forward a user's model key to storage.
-  const file = await fetcher(url.toString(), { signal, redirect: 'error' });
-  if (!file.ok) throw new ApiError(502, 'audio_download', '语音暂时没有送达，请再点一次朗读。');
-  const audio = await limitedBytes(file.body, 24 * 1024 * 1024);
-  if (audio.byteLength < 12 || String.fromCharCode(...audio.subarray(0, 4)) !== 'RIFF' ||
-      String.fromCharCode(...audio.subarray(8, 12)) !== 'WAVE') {
-    throw new ApiError(502, 'invalid_audio', '语音文件没有读完整，请再点一次朗读。');
-  }
-  return new Response(audio, { headers: { ...privateHeaders, 'Content-Type': 'audio/wav' } });
 }
 
 function base64url(bytes) {
@@ -290,18 +255,12 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
     if ((origin && origin !== url.origin) || request.headers.get('sec-fetch-site') === 'cross-site') {
       throw new ApiError(403, 'origin_denied', '请从知伴页面重新打开。');
     }
-    const service = env.MODEL_PROVIDER || 'dashscope';
-    if (!Object.hasOwn(chatModels, service)) throw new ApiError(503, 'config_error', '请检查服务端的模型设置。');
-    const model = service === 'openai' ? env.OPENAI_CHAT_MODEL || chatModels.openai : chatModels.dashscope;
-    if (service === 'openai' && !['chat-latest', 'gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra'].includes(model)) {
-      throw new ApiError(503, 'config_error', '请检查服务端的旗舰模型名称。');
-    }
-    const envKey = (service === 'openai' ? env.OPENAI_API_KEY : env.DASHSCOPE_API_KEY)?.trim();
+    const envKey = env.OPENAI_API_KEY?.trim();
     const hasFamily = !!(envKey && env.FAMILY_ACCESS_CODE?.length >= 12 && env.FAMILY_ACCESS_CODE?.length <= 512);
     const localKey = !!(localAccess && envKey && !env.FAMILY_ACCESS_CODE);
     const familySession = hasFamily && await hasFamilySession(request, env.FAMILY_ACCESS_CODE);
     const config = signedIn => ({
-      provider: service, model, serverKeyAvailable: localKey || signedIn,
+      provider: 'openai', model: chatModel, serverKeyAvailable: localKey || signedIn,
       familyAccessEnabled: hasFamily, familyCodeRequired: hasFamily && !signedIn
     });
     if (url.pathname === '/api/config' && request.method === 'GET') {
@@ -327,14 +286,14 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
     }
     if (request.method !== 'POST' || url.pathname === '/api/config') throw new ApiError(405, 'method', '请从知伴页面发送内容。');
     const expected = request.headers.get('X-Model-Provider');
-    if ((expected || service === 'openai') && expected !== service) {
-      throw new ApiError(409, 'provider_changed', '服务商已变更，请刷新页面后确认。');
+    if (expected !== 'openai') {
+      throw new ApiError(409, 'provider_changed', '请刷新页面后，确认使用 OpenAI 问答服务。');
     }
     let apiKey;
     const auth = request.headers.get('authorization');
     if (auth) {
       const match = /^Bearer ([^\s,]{8,512})$/.exec(auth);
-      if (!match) throw new ApiError(401, 'key_invalid', '请在设置里重新填写相应服务商的密钥。');
+      if (!match) throw new ApiError(401, 'key_invalid', '请在设置里重新填写 OpenAI 密钥。');
       apiKey = match[1];
     } else if (localKey || familySession || (hasFamily && await codeMatches(env.FAMILY_ACCESS_CODE, request.headers.get('x-family-code')))) {
       if (familySession && origin !== url.origin) throw new ApiError(403, 'origin_denied', '请从知伴页面发送内容。');
@@ -346,7 +305,7 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
     }
     const upstream = new AbortController();
     const abort = () => upstream.abort(request.signal?.reason);
-    const timer = setTimeout(() => upstream.abort(new DOMException('timeout', 'TimeoutError')), 65000);
+    const timer = setTimeout(() => upstream.abort(new DOMException('timeout', 'TimeoutError')), url.pathname === '/api/chat' ? 120000 : 65000);
     if (request.signal?.aborted) abort();
     else request.signal?.addEventListener('abort', abort, { once: true });
     releaseTimeout = () => {
@@ -355,17 +314,14 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
     };
     const signal = upstream.signal;
     if (url.pathname === '/api/speak') {
-      const body = speechInput(await readInput(request, 16000));
-      if (service === 'openai') {
-        const file = await upstreamRequest(fetcher, 'https://api.openai.com/v1/audio/speech', apiKey,
-          { model: 'gpt-4o-mini-tts', input: body.input.text, voice: 'coral', response_format: 'wav' }, signal);
-        return new Response(await limitedBytes(file.body, 24 * 1024 * 1024), { headers: { ...privateHeaders, 'Content-Type': 'audio/wav' } });
-      }
-      return await readSpeech(fetcher, await callProvider(fetcher, speechPath, apiKey, body, signal), signal);
+      const text = speechInput(await readInput(request, 16000));
+      const file = await upstreamRequest(fetcher, 'https://api.openai.com/v1/audio/speech', apiKey,
+        { model: 'gpt-4o-mini-tts', input: text, voice: 'coral', response_format: 'wav' }, signal);
+      return new Response(await limitedBytes(file.body, 24 * 1024 * 1024), { headers: { ...privateHeaders, 'Content-Type': 'audio/wav' } });
     }
     const transcribe = url.pathname === '/api/transcribe';
     const data = await readInput(request, transcribe ? 3 * 1024 * 1024 : 5 * 1024 * 1024);
-    if (transcribe && service === 'openai') {
+    if (transcribe) {
       const audio = checkDataURL(data.audio, ['data:audio/wav;base64'], 2 * 1024 * 1024);
       const bytes = Uint8Array.from(atob(audio.split(',')[1]), c => c.charCodeAt(0));
       const form = new FormData();
@@ -376,13 +332,9 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
       if (!result.text?.trim()) throw new ApiError(422, 'empty_audio', '这次没有听清，请再说一次。');
       return json({ text: result.text.trim() });
     }
-    const body = transcribe ? asrInput(data) : chatInput(data, service, model);
-    const type = transcribe ? 'asr' : body.response_format ? 'photo' : 'chat';
-    if (service === 'openai') {
-      const response = await upstreamRequest(fetcher, 'https://api.openai.com/v1/chat/completions', apiKey, body, signal);
-      return readModelText(await response.json(), type);
-    }
-    return readModelText(await callProvider(fetcher, chatPath, apiKey, body, signal), type);
+    const body = chatInput(data);
+    const response = await upstreamRequest(fetcher, 'https://api.openai.com/v1/chat/completions', apiKey, body, signal);
+    return readModelText(await response.json(), body.response_format ? 'photo' : 'chat');
   } catch (error) {
     if (error instanceof ApiError) return json({ code: error.code, error: error.message }, error.status);
     if (error?.name === 'TimeoutError' || error?.name === 'AbortError') return json({ code: 'timeout', error: '等候时间有点长，请稍后再试。' }, 504);

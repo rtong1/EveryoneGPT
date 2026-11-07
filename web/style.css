@@ -140,6 +140,8 @@ h1, h2, h3, p { margin: 0; }
 .section-heading .secondary-button { flex-shrink: 0; }
 .panel, .chat-box { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; }
 .chat-box { overflow: hidden; }
+.previous-chat { padding: .35rem 1rem; border-bottom: 1px solid var(--line); }
+.previous-chat summary { padding: .7rem 0; font-weight: 600; cursor: pointer; overflow-wrap: anywhere; }
 .chat-messages { padding: 1.2rem clamp(.85rem, 3vw, 2rem); min-height: 210px; }
 .chat-messages:empty { display: grid; place-items: center; color: var(--muted); }
 .chat-messages:empty::before { content: "您想聊些什么？"; font-size: 1.17rem; }

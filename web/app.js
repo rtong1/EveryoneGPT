@@ -1,3 +1,4 @@
+import {modelMessages, shouldSuggestNewChat} from './conversation.js';
 import {openMicrophone} from './voice-capture.js';
 import {createReader, preparePhoto} from './media.js';
 import {wireJournal} from './journal-ui.js';
@@ -29,14 +30,15 @@ let chatPending = false, chatGeneration = 0, chatController = null, selectedPhot
 let preparingPhoto = false, pendingVoice = null, mic = null, micReady = false, finishingMic = false;
 let micTurn = 0, micTimer, dictation = null, uploadingVoice = false, journal, cloudDialog = false;
 let autoRead = getPref('auto-read') === 'yes', cloudOkay = false;
-let previousPage = 'home', retryDraft = null;
+let previousPage = 'home', retryDraft = null, nextTopicPrompt = 0;
+let choosingTopic = false;
 function announce(message) {
   const toast = byId('toast'); clearTimeout(toastTimer);
   toast.textContent = message;
   toast.classList.add('visible','shown');
   toastTimer = setTimeout(() => { toast.textContent = ''; toast.classList.remove('visible','shown'); }, 6500);
 }
-function askDialog(dialog, yes, no) {
+function askDialog(dialog, yes, no, onCancel = false) {
   return new Promise(resolve => {
     const done = value => {
       yes.removeEventListener('click', accept); no.removeEventListener('click', decline);
@@ -45,7 +47,7 @@ function askDialog(dialog, yes, no) {
       resolve(value);
     };
     const accept = () => done(true), decline = () => done(false);
-    const cancelled = event => { event.preventDefault(); decline(); };
+    const cancelled = event => { event.preventDefault(); done(onCancel); };
     yes.addEventListener('click',accept); no.addEventListener('click',decline);
     dialog.addEventListener('cancel',cancelled);
     if (dialog.showModal) dialog.showModal(); else dialog.setAttribute('open','');
@@ -65,8 +67,8 @@ async function allowCloud() {
   if (cloudDialog) return false;
   cloudDialog = true;
   try {
-    cloudOkay = await confirmNotice('使用智能问答', serviceLabel() + ' 将处理您发送的问题、照片或录音，用于问答、转写和合成朗读。健康本里的其他记录保存在本机。', '同意并继续','暂时不用');
-    if (cloudOkay) setPref('cloud-consent-v2-' + config.provider,'yes');
+    cloudOkay = await confirmNotice('使用智能问答', 'OpenAI 将处理您发送的问题、照片或录音，用于问答、转写和合成朗读。健康本里的其他记录保存在本机。', '同意并继续','暂时不用');
+    if (cloudOkay) setPref('cloud-consent-v2-openai','yes');
     return cloudOkay;
   } finally { cloudDialog = false; }
 }
@@ -85,10 +87,9 @@ async function api(path, data, options = {}) {
   const abort = () => controller.abort();
   if (options.signal?.aborted) abort();
   options.signal?.addEventListener('abort',abort,{once:true});
-  const timer = setTimeout(abort, 95000);
+  const timer = setTimeout(abort, path === '/api/chat' ? 135000 : 95000);
   try {
-    const headers = {};
-    if (config.provider) headers['X-Model-Provider'] = config.provider;
+    const headers = {'X-Model-Provider':'openai'};
     if (data !== undefined) headers['Content-Type'] = 'application/json';
     if (options.auth !== false) {
       if (apiKey) headers.Authorization = 'Bearer ' + apiKey;
@@ -111,25 +112,20 @@ async function api(path, data, options = {}) {
     clearTimeout(timer); options.signal?.removeEventListener('abort',abort);
   }
 }
-function serviceLabel() { return config.provider === 'openai' ? 'OpenAI' : '阿里云百炼（北京）'; }
 function serviceState() {
   if (apiKey) return '正在使用本次填写的服务密钥。关闭或刷新页面会清除它。';
   if (config.serverKeyAvailable || familyCode) return '家庭问答服务已连接。';
   if (config.familyCodeRequired) return '输入家人提供的家庭服务码，就可以开始聊天。';
-  return config.provider ? '请填写' + serviceLabel() + '的 API Key。' : '正在读取服务配置。';
+  return config.provider ? '请填写 OpenAI 密钥。' : '正在读取服务配置。';
 }
 function updateSetupNotice() {
   const hint=byId('home-service-setup');
   if (hint) hint.hidden=!!(apiKey || familyCode || config.serverKeyAvailable);
 }
 function applyConfig(updated) {
-  if (config.provider && config.provider !== updated.provider) {
-    apiKey = ''; familyCode = ''; byId('api-key').value = '';
-  }
+  if (updated.provider !== 'openai') throw new Error('请家人更新问答服务后，再刷新页面。');
   config = updated;
-  cloudOkay = getPref('cloud-consent-v2-' + config.provider) === 'yes';
-  byId('model-label').textContent = serviceLabel() + ' · ' + config.model;
-  byId('privacy-provider').textContent = serviceLabel();
+  cloudOkay = getPref('cloud-consent-v2-openai') === 'yes';
   const family = byId('family-access');
   if (family) family.hidden = !config.familyAccessEnabled;
   if (byId('forget-family')) byId('forget-family').hidden = !config.familyAccessEnabled || (!config.serverKeyAvailable && !familyCode);
@@ -167,7 +163,7 @@ function setFont(large) {
   all('[data-action="font"]').forEach(b => b.setAttribute('aria-pressed',String(large)));
 }
 function updateActions() {
-  const blocked = chatPending || preparingPhoto || uploadingVoice;
+  const blocked = choosingTopic || chatPending || preparingPhoto || uploadingVoice;
   byId('chat-send').disabled = blocked || !!mic || micReady || !!dictation || finishingMic;
   all('[data-action="photo"],[data-action="voice"],[data-prompt]').forEach(b => {b.disabled = blocked || micReady || !!mic || finishingMic;});
   all('[data-action="finish-voice"]').forEach(b => {b.disabled = !mic || finishingMic;});
@@ -186,7 +182,7 @@ function latest() { chatLog.lastElementChild?.scrollIntoView({block:'nearest'});
 const reader = createReader({
   fetchAudio:(text,signal) => api('/api/speak',{text},{audio:true,signal}),
   onState:() => {
-    chatLog.querySelectorAll('[data-read-id]').forEach(control => {
+    all('[data-read-id]').forEach(control => {
       const active = Number(control.dataset.readId) === reader.active;
       control.textContent = active ? '停止朗读' : '朗读回答'; control.setAttribute('aria-pressed',String(active));
     });
@@ -217,35 +213,48 @@ function appendMessage(msg) {
   } else if (!msg.deferReview) journal.addRecordAction(msg,actions);
   entry.append(actions); msg.element=entry; chatLog.append(entry); latest();
 }
-function modelMessages(current) {
-  const turns = messages.filter(m => !m.failed).slice(-11);
-  // A model request always starts with the user's actual turn.
-  while (turns.length && turns[0].role !== 'user') turns.shift();
-  turns.push(current);
-  let photos = 0;
-  return turns.reverse().map(m => {
-    const obj={role:m.role,text:m.text};
-    if (m.image) {
-      if (++photos <= 2) obj.image = m.image;
-      else if (!obj.text) obj.text = '（此前发过一张图片）';
-    }
-    return obj;
-  }).reverse();
+function archiveChat() {
+  const archive = byId('previous-chats');
+  const section = el('details', 'previous-chat');
+  const label = messages[0]?.text || '照片提问';
+  const excerpt = label.length > 20 ? label.slice(0, 20) + '…' : label;
+  section.append(el('summary', '', '查看之前的聊天 · ' + excerpt));
+  while (chatLog.firstChild) section.append(chatLog.firstChild);
+  archive.prepend(section);
+  messages.length = 0;
+  retryDraft = null;
+  nextTopicPrompt = 0;
 }
 function scrollLate() { if (page==='chat') requestAnimationFrame(latest); }
 async function sendMessage({voice=false} = {}) {
-  if (chatPending || preparingPhoto || uploadingVoice || mic || micReady || finishingMic) return;
+  if (choosingTopic || chatPending || preparingPhoto || uploadingVoice || mic || micReady || finishingMic) return;
   const text = input.value.trim(), image = selectedPhoto;
   if (!text && !image) { input.focus(); return; }
   if (text.length > 3500) { statusLine('这个问题比较长，请分成两次发送。'); return; }
-  if (!(await allowCloud()) || chatPending) return;
+  if (!(await allowCloud()) || chatPending || choosingTopic) return;
   if (page!=='chat') go('chat');
   reader.stop();
   const outgoing = retryDraft && retryDraft.text===text && retryDraft.image===image ? retryDraft : {id:++nextId,role:'user',text,image,fromVoice:voice};
+  if (outgoing !== retryDraft && shouldSuggestNewChat(messages, outgoing, nextTopicPrompt)) {
+    const version = chatGeneration;
+    choosingTopic = true;
+    updateActions();
+    let answer;
+    try {
+      answer = await askDialog(byId('topic-dialog'), byId('topic-new'), byId('topic-continue'), null);
+    } finally {
+      choosingTopic = false;
+      updateActions();
+    }
+    if (answer === null || version !== chatGeneration || page !== 'chat' ||
+        text !== input.value.trim() || image !== selectedPhoto) return;
+    if (answer) archiveChat();
+    else nextTopicPrompt = messages.length / 2 + 4;
+  }
   const priorUser=messages.filter(m=>m.role==='user').at(-1);
   outgoing.confirmedPhoto=!!priorUser?.image && /(?:这是我|是我自己|我本人).{0,8}(?:血压|血糖|测|量)/.test(text);
   if (outgoing.confirmedPhoto) {outgoing.photoSource=priorUser.image;outgoing.reading=priorUser.reading;}
-  const payload = modelMessages(outgoing);
+  const payload = modelMessages(messages, outgoing);
   const version = chatGeneration;
   chatPending = true; updateActions();
   const controller = new AbortController(); chatController = controller;
@@ -383,11 +392,12 @@ function addDictation(form,target) {
 function resetChat() {
   chatGeneration++;chatController?.abort();chatController=null;chatPending=false;
   stopRecording();reader.stop();messages.length=0;chatLog.replaceChildren();
+  byId('previous-chats').replaceChildren();nextTopicPrompt=0;
   selectedPhoto=null;pendingVoice=null;retryDraft=null;input.value=''; input.readOnly=false;
   showDraft();statusLine('');updateActions();
 }
 async function newChat() {
-  if (messages.length || input.value || pendingVoice || selectedPhoto || chatPending) {
+  if (messages.length || byId('previous-chats').childElementCount || input.value || pendingVoice || selectedPhoto || chatPending) {
     const ok=await askDialog(byId('new-chat-dialog'),byId('new-chat-confirm'),byId('new-chat-cancel'));
     if (!ok) return;
   }
