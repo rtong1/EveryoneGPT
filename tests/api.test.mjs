@@ -134,3 +134,56 @@ test('speech recognition forwards a data URI; synthesis downloads its WAV over H
   });
   assert.equal(blocked.status, 502);
 });
+
+test('flagship routing binds consent, image inputs and billing to the selected provider', async () => {
+  const env = { MODEL_PROVIDER: 'openai', OPENAI_API_KEY: 'openai-family-test', DASHSCOPE_API_KEY: 'unused' };
+  const bound = { ...auth, 'X-Model-Provider': 'openai' };
+  const messages = [{ role: 'user', image: disposablePhoto }];
+  const denied = () => assert.fail('must not contact provider');
+  assert.equal((await handleApi(req('/api/chat', { messages }, auth), env, { fetcher: denied })).status, 409);
+  assert.equal((await handleApi(req('/api/chat', { messages }, bound), {}, { fetcher: denied })).status, 409);
+  const config = await handleApi(req('/api/config'), env);
+  assert.equal((await config.json()).model, 'gpt-6-astra');
+  const urls = [];
+  const fetcher = async (url, init) => {
+    urls.push(url);
+    assert.equal(init.headers.Authorization, auth.Authorization);
+    const body = JSON.parse(init.body);
+    assert.equal(body.model, 'gpt-6-astra');
+    assert.equal(body.messages.at(-1).content[0].image_url.url, disposablePhoto);
+    assert.equal(body.enable_thinking, undefined);
+    return Response.json({ choices: [{ message: { content: '{"text":"这是通知。","reading":null}' } }] });
+  };
+  const reply = await handleApi(req('/api/chat', { messages }, bound), env, { fetcher });
+  assert.equal((await reply.json()).text, '这是通知。');
+  assert.deepEqual(urls, ['https://api.openai.com/v1/chat/completions']);
+  const mainland = await handleApi(req('/api/config'), {});
+  assert.equal((await mainland.json()).model, 'qwen3.8-max');
+  const deniedUpstream = await handleApi(req('/api/chat', question, bound), env, { fetcher: async url => {
+    assert.equal(new URL(url).hostname, 'api.openai.com');
+    return new Response('', {status:403});
+  }});
+  assert.equal(deniedUpstream.status, 403);
+});
+
+test('OpenAI voice routes use the selected account for ASR and speech', async () => {
+  const env = { MODEL_PROVIDER: 'openai' };
+  const headers = { ...auth, 'X-Model-Provider':'openai' };
+  const asr = await handleApi(req('/api/transcribe', { audio: 'data:audio/wav;base64,AAAA' }, headers), env, {
+    fetcher: async (url, init) => {
+      assert.equal(url, 'https://api.openai.com/v1/audio/transcriptions');
+      assert.equal(init.body.get('model'), 'gpt-transcribe');
+      assert.equal(init.body.get('file').size, 3);
+      return Response.json({ text: '您好' });
+    }
+  });
+  assert.equal((await asr.json()).text, '您好');
+  const speech = await handleApi(req('/api/speak', { text: '您好' }, headers), env, {
+    fetcher: async (url, init) => {
+      assert.equal(url, 'https://api.openai.com/v1/audio/speech');
+      assert.equal(JSON.parse(init.body).response_format, 'wav');
+      return new Response(new Uint8Array(16));
+    }
+  });
+  assert.equal(speech.headers.get('content-type'), 'audio/wav');
+});

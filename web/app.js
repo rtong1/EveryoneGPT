@@ -28,7 +28,7 @@ let nextId = 0, page = 'home', toastTimer, config = {}, apiKey = '', familyCode 
 let chatPending = false, chatGeneration = 0, chatController = null, selectedPhoto = null;
 let preparingPhoto = false, pendingVoice = null, mic = null, micReady = false, finishingMic = false;
 let micTurn = 0, micTimer, dictation = null, uploadingVoice = false, journal, cloudDialog = false;
-let autoRead = getPref('auto-read') === 'yes', cloudOkay = getPref('cloud-consent-v1') === 'yes';
+let autoRead = getPref('auto-read') === 'yes', cloudOkay = false;
 let previousPage = 'home', retryDraft = null;
 function announce(message) {
   const toast = byId('toast'); clearTimeout(toastTimer);
@@ -59,12 +59,14 @@ async function confirmNotice(title, body, yes, no) {
   return await askDialog(dialog, byId('consent-accept'), byId('consent-decline'));
 }
 async function allowCloud() {
+  if (!config.provider) await loadConfig();
+  if (!config.provider) { announce('请先检查网络并连接问答服务。'); return false; }
   if (cloudOkay) return true;
   if (cloudDialog) return false;
   cloudDialog = true;
   try {
-    cloudOkay = await confirmNotice('使用智能问答', '发送的问题、照片或录音会通过本服务交给阿里云百炼处理，用来生成回答、识别语音或朗读。健康本里的其他记录由您保管在本机。', '同意并继续','暂时不用');
-    if (cloudOkay) setPref('cloud-consent-v1','yes');
+    cloudOkay = await confirmNotice('使用智能问答', serviceLabel() + ' 将处理您发送的问题、照片或录音，用于问答、转写和合成朗读。健康本里的其他记录保存在本机。', '同意并继续','暂时不用');
+    if (cloudOkay) setPref('cloud-consent-v2-' + config.provider,'yes');
     return cloudOkay;
   } finally { cloudDialog = false; }
 }
@@ -86,6 +88,7 @@ async function api(path, data, options = {}) {
   const timer = setTimeout(abort, 95000);
   try {
     const headers = {};
+    if (config.provider) headers['X-Model-Provider'] = config.provider;
     if (data !== undefined) headers['Content-Type'] = 'application/json';
     if (options.auth !== false) {
       if (apiKey) headers.Authorization = 'Bearer ' + apiKey;
@@ -108,18 +111,25 @@ async function api(path, data, options = {}) {
     clearTimeout(timer); options.signal?.removeEventListener('abort',abort);
   }
 }
+function serviceLabel() { return config.provider === 'openai' ? 'OpenAI' : '阿里云百炼（北京）'; }
 function serviceState() {
-  if (apiKey) return '正在使用本次填写的百炼密钥。关闭或刷新页面会清除它。';
+  if (apiKey) return '正在使用本次填写的服务密钥。关闭或刷新页面会清除它。';
   if (config.serverKeyAvailable || familyCode) return '家庭问答服务已连接。';
   if (config.familyCodeRequired) return '输入家人提供的家庭服务码，就可以开始聊天。';
-  return '请填写中国内地（北京）地域的百炼服务密钥。';
+  return config.provider ? '请填写' + serviceLabel() + '的 API Key。' : '正在读取服务配置。';
 }
 function updateSetupNotice() {
   const hint=byId('home-service-setup');
   if (hint) hint.hidden=!!(apiKey || familyCode || config.serverKeyAvailable);
 }
 function applyConfig(updated) {
+  if (config.provider && config.provider !== updated.provider) {
+    apiKey = ''; familyCode = ''; byId('api-key').value = '';
+  }
   config = updated;
+  cloudOkay = getPref('cloud-consent-v2-' + config.provider) === 'yes';
+  byId('model-label').textContent = serviceLabel() + ' · ' + config.model;
+  byId('privacy-provider').textContent = serviceLabel();
   const family = byId('family-access');
   if (family) family.hidden = !config.familyAccessEnabled;
   if (byId('forget-family')) byId('forget-family').hidden = !config.familyAccessEnabled || (!config.serverKeyAvailable && !familyCode);

@@ -1,6 +1,7 @@
 const provider = 'https://dashscope.aliyuncs.com';
 const chatPath = '/compatible-mode/v1/chat/completions';
 const speechPath = '/api/v1/services/aigc/multimodal-generation/generation';
+const chatModels = { dashscope: 'qwen3.8-max', openai: 'gpt-6-astra' };
 const familyCookie = 'zhiban_family';
 const familyLifetime = 30 * 24 * 60 * 60;
 const textEncoder = new TextEncoder();
@@ -87,7 +88,7 @@ function checkDataURL(value, allowed, maxBytes) {
   return value;
 }
 
-function chatInput(body) {
+function chatInput(body, service, model) {
   if (!Array.isArray(body.messages) || !body.messages.length || body.messages.length > 12) {
     invalid('请重新开始本轮对话。');
   }
@@ -112,10 +113,11 @@ function chatInput(body) {
   if (messages.at(-1).role !== 'user') invalid('请先告诉知伴您想问什么。');
   const photo = !!body.messages.at(-1).image;
   return {
-    model: 'qwen3-vl-plus',
+    model,
     messages: [{ role: 'system', content: photo ? guide + '\n' + photoFormat : guide }, ...messages],
-    ...(photo ? { response_format: { type: 'json_object' }, enable_thinking: false } : {}),
-    max_tokens: 1000, stream: false
+    ...(photo ? { response_format: { type: 'json_object' } } : {}),
+    ...(service === 'openai' ? { max_completion_tokens: 8192, store: false } : { max_tokens: 4096, ...(photo ? { enable_thinking: false } : {}) }),
+    stream: false
   };
 }
 
@@ -136,16 +138,23 @@ function speechInput(body) {
 }
 
 const cloudErrors = new Map([
-  [401, [401, 'key_invalid', '服务密钥无效，请在设置中检查北京地域的百炼密钥。']],
-  [403, [403, 'provider_denied', '该密钥没有开通此项服务，请检查百炼模型权限和账户余额。']],
-  [402, [402, 'billing', '百炼账户余额不足，请检查账户计费。']],
+  [401, [401, 'key_invalid', '服务密钥无效，请在设置中检查服务商和密钥。']],
+  [403, [403, 'provider_denied', '该密钥没有开通此项服务，请检查模型权限和账户余额。']],
+  [402, [402, 'billing', '模型账户余额不足，请检查账户计费。']],
   [429, [429, 'rate_limited', '现在使用的人较多，或账户额度已用完，请稍后再试。']]
 ]);
 
 async function callProvider(fetcher, path, key, body, signal) {
-  const response = await fetcher(provider + path, {
-    method: 'POST', headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body), redirect: 'error', signal
+  const response = await upstreamRequest(fetcher, provider + path, key, body, signal);
+  return response.json();
+}
+
+async function upstreamRequest(fetcher, url, key, body, signal) {
+  const multipart = body instanceof FormData;
+  const headers = { Authorization: 'Bearer ' + key };
+  if (!multipart) headers['Content-Type'] = 'application/json';
+  const response = await fetcher(url, {
+    method: 'POST', headers, body: multipart ? body : JSON.stringify(body), redirect: 'error', signal
   });
   if (!response.ok) {
     const details = cloudErrors.get(response.status);
@@ -155,7 +164,7 @@ async function callProvider(fetcher, path, key, body, signal) {
     }
     throw new ApiError(502, 'provider_error', '暂时连不上智能服务，稍后再试一次。');
   }
-  return response.json();
+  return response;
 }
 
 function validatedReading(candidate, text) {
@@ -281,12 +290,18 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
     if ((origin && origin !== url.origin) || request.headers.get('sec-fetch-site') === 'cross-site') {
       throw new ApiError(403, 'origin_denied', '请从知伴页面重新打开。');
     }
-    const envKey = env.DASHSCOPE_API_KEY?.trim();
+    const service = env.MODEL_PROVIDER || 'dashscope';
+    if (!Object.hasOwn(chatModels, service)) throw new ApiError(503, 'config_error', '请检查服务端的模型设置。');
+    const model = service === 'openai' ? env.OPENAI_CHAT_MODEL || chatModels.openai : chatModels.dashscope;
+    if (service === 'openai' && !['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra'].includes(model)) {
+      throw new ApiError(503, 'config_error', '请检查服务端的旗舰模型名称。');
+    }
+    const envKey = (service === 'openai' ? env.OPENAI_API_KEY : env.DASHSCOPE_API_KEY)?.trim();
     const hasFamily = !!(envKey && env.FAMILY_ACCESS_CODE?.length >= 12 && env.FAMILY_ACCESS_CODE?.length <= 512);
     const localKey = !!(localAccess && envKey && !env.FAMILY_ACCESS_CODE);
     const familySession = hasFamily && await hasFamilySession(request, env.FAMILY_ACCESS_CODE);
     const config = signedIn => ({
-      provider: 'dashscope', serverKeyAvailable: localKey || signedIn,
+      provider: service, model, serverKeyAvailable: localKey || signedIn,
       familyAccessEnabled: hasFamily, familyCodeRequired: hasFamily && !signedIn
     });
     if (url.pathname === '/api/config' && request.method === 'GET') {
@@ -311,11 +326,15 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
       return json(config(true), 200, { 'Set-Cookie': cookieHeader(token, familyLifetime, secure) });
     }
     if (request.method !== 'POST' || url.pathname === '/api/config') throw new ApiError(405, 'method', '请从知伴页面发送内容。');
+    const expected = request.headers.get('X-Model-Provider');
+    if ((expected || service === 'openai') && expected !== service) {
+      throw new ApiError(409, 'provider_changed', '服务商已变更，请刷新页面后确认。');
+    }
     let apiKey;
     const auth = request.headers.get('authorization');
     if (auth) {
       const match = /^Bearer ([^\s,]{8,512})$/.exec(auth);
-      if (!match) throw new ApiError(401, 'key_invalid', '请在设置里重新填写百炼服务密钥。');
+      if (!match) throw new ApiError(401, 'key_invalid', '请在设置里重新填写相应服务商的密钥。');
       apiKey = match[1];
     } else if (localKey || familySession || (hasFamily && await codeMatches(env.FAMILY_ACCESS_CODE, request.headers.get('x-family-code')))) {
       if (familySession && origin !== url.origin) throw new ApiError(403, 'origin_denied', '请从知伴页面发送内容。');
@@ -323,7 +342,7 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
     } else if (hasFamily) {
       throw new ApiError(401, 'family_code_required', '请在设置中填写家庭口令。');
     } else {
-      throw new ApiError(401, 'key_required', '请先在设置里连接百炼服务。');
+      throw new ApiError(401, 'key_required', '请先在设置里连接问答服务。');
     }
     const upstream = new AbortController();
     const abort = () => upstream.abort(request.signal?.reason);
@@ -337,12 +356,32 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
     const signal = upstream.signal;
     if (url.pathname === '/api/speak') {
       const body = speechInput(await readInput(request, 16000));
+      if (service === 'openai') {
+        const file = await upstreamRequest(fetcher, 'https://api.openai.com/v1/audio/speech', apiKey,
+          { model: 'gpt-4o-mini-tts', input: body.input.text, voice: 'coral', response_format: 'wav' }, signal);
+        return new Response(await limitedBytes(file.body, 24 * 1024 * 1024), { headers: { ...privateHeaders, 'Content-Type': 'audio/wav' } });
+      }
       return await readSpeech(fetcher, await callProvider(fetcher, speechPath, apiKey, body, signal), signal);
     }
     const transcribe = url.pathname === '/api/transcribe';
     const data = await readInput(request, transcribe ? 3 * 1024 * 1024 : 5 * 1024 * 1024);
-    const body = transcribe ? asrInput(data) : chatInput(data);
+    if (transcribe && service === 'openai') {
+      const audio = checkDataURL(data.audio, ['data:audio/wav;base64'], 2 * 1024 * 1024);
+      const bytes = Uint8Array.from(atob(audio.split(',')[1]), c => c.charCodeAt(0));
+      const form = new FormData();
+      form.set('model', 'gpt-transcribe');
+      form.set('file', new Blob([bytes], { type: 'audio/wav' }), 'voice.wav');
+      const response = await upstreamRequest(fetcher, 'https://api.openai.com/v1/audio/transcriptions', apiKey, form, signal);
+      const result = await response.json();
+      if (!result.text?.trim()) throw new ApiError(422, 'empty_audio', '这次没有听清，请再说一次。');
+      return json({ text: result.text.trim() });
+    }
+    const body = transcribe ? asrInput(data) : chatInput(data, service, model);
     const type = transcribe ? 'asr' : body.response_format ? 'photo' : 'chat';
+    if (service === 'openai') {
+      const response = await upstreamRequest(fetcher, 'https://api.openai.com/v1/chat/completions', apiKey, body, signal);
+      return readModelText(await response.json(), type);
+    }
     return readModelText(await callProvider(fetcher, chatPath, apiKey, body, signal), type);
   } catch (error) {
     if (error instanceof ApiError) return json({ code: error.code, error: error.message }, error.status);

@@ -116,7 +116,7 @@
           </div>
         </form>
       </div>
-      <p class="privacy-note chat-privacy"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"/></svg>发送后，问答服务会将文字、照片或语音交给阿里云百炼处理。</p>
+      <p class="privacy-note chat-privacy"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lock"/></svg>发送后，问答服务会将文字、照片或语音交给<span id="privacy-provider">当前配置的服务商</span>处理。</p>
     </section>
 
     <section class="app-view journal-view" data-view="health" aria-labelledby="health-title" hidden>
@@ -154,8 +154,8 @@
             <label class="setting-row"><span>在这台设备上记住家庭服务（30 天）</span><input type="checkbox" id="remember-family" class="switch"></label>
             <button type="button" id="forget-family" class="link-button">清除家庭服务码</button>
           </div>
-          <label for="api-key" class="field-label">阿里云百炼 API Key（服务密钥）</label>
-          <p id="key-help" class="field-help">可请家人协助填写。使用自己的密钥时，费用计入对应的百炼账户。</p>
+          <label for="api-key" class="field-label"><span id="model-label">问答服务</span> · API Key</label>
+          <p id="key-help" class="field-help">可请家人协助填写。使用自己的密钥时，费用计入对应的模型服务账户。</p>
           <input id="api-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="key-help" placeholder="输入服务密钥">
           <button type="button" class="link-button forget-key" data-action="forget-key">清除本次密钥</button>
         </section>
