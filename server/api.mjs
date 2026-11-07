@@ -1,7 +1,7 @@
 const provider = 'https://dashscope.aliyuncs.com';
 const chatPath = '/compatible-mode/v1/chat/completions';
 const speechPath = '/api/v1/services/aigc/multimodal-generation/generation';
-const chatModels = { dashscope: 'qwen3.8-max', openai: 'gpt-6-astra' };
+const chatModels = { dashscope: 'qwen3.8-max', openai: 'chat-latest' };
 const familyCookie = 'zhiban_family';
 const familyLifetime = 30 * 24 * 60 * 60;
 const textEncoder = new TextEncoder();
@@ -293,7 +293,7 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
     const service = env.MODEL_PROVIDER || 'dashscope';
     if (!Object.hasOwn(chatModels, service)) throw new ApiError(503, 'config_error', '请检查服务端的模型设置。');
     const model = service === 'openai' ? env.OPENAI_CHAT_MODEL || chatModels.openai : chatModels.dashscope;
-    if (service === 'openai' && !['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra'].includes(model)) {
+    if (service === 'openai' && !['chat-latest', 'gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra'].includes(model)) {
       throw new ApiError(503, 'config_error', '请检查服务端的旗舰模型名称。');
     }
     const envKey = (service === 'openai' ? env.OPENAI_API_KEY : env.DASHSCOPE_API_KEY)?.trim();

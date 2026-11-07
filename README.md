@@ -9,9 +9,9 @@
 | 服务范围 | 配置 | 问答与图片 | 云端语音 |
 |---|---|---|---|
 | 北京百炼，默认 | `MODEL_PROVIDER=dashscope`，可配 `DASHSCOPE_API_KEY` | Qwen3.8-Max | 百炼识别和朗读 |
-| OpenAI 官方支持地区 | `MODEL_PROVIDER=openai`，可配 `OPENAI_API_KEY` | GPT-6 Astra | GPT-Transcribe 和 GPT-4o mini TTS |
+| OpenAI 官方支持地区 | `MODEL_PROVIDER=openai`，可配 `OPENAI_API_KEY` | ChatGPT 最新 Instant（chat-latest） | GPT-Transcribe 和 GPT-4o mini TTS |
 
-OpenAI 默认采用官方定位为最高智能的 `gpt-6-astra`。若希望使用更新发布的 6.1 系列，设置 `OPENAI_CHAT_MODEL=gpt-6.1-sol` 或 `gpt-6.1-terra`，重启后可在设置页核对。
+OpenAI 默认 `chat-latest` 随官方更新，指向 ChatGPT 最新 Instant 聊天模型。希望固定使用官方最高智能型号时设置 `OPENAI_CHAT_MODEL=gpt-6-astra`。也可选择 6.1 系列，设置 `OPENAI_CHAT_MODEL=gpt-6.1-sol` 或 `gpt-6.1-terra`，重启后可在设置页核对。
 
 在项目目录复制 `.env.example` 为 `.env`，选择服务商，重启应用。也可在网页中填入所选服务商的个人密钥。设置页显示实际模型。OpenAI 模式适用于其支持地区；中国大陆不在该名单。后文的北京地域、密钥与费用说明适用于百炼模式。发布新旗舰时需核对 API 与图像兼容性并更新型号。
 
