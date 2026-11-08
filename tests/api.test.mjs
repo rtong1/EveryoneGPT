@@ -116,13 +116,16 @@ test('an incomplete photo response is retriable and a model refusal stays visibl
   assert.deepEqual(await refusal.json(), {text: '图片模糊，读不清数字。'});
 });
 
-test('each question uses the same model, with server-selected effort and one upstream call', async () => {
+test('each turn uses one AIHubMix call with the model and effort selected by the server', async () => {
   const config = await (await handleApi(req('/api/config'), env)).json();
   assert.equal(config.provider, 'aihubmix');
   assert.equal(config.model, 'gpt-6.1-terra');
-  for (const [question, expected] of [
-    [{text: '怎么打开手机相册？'}, 'low'], [{text: '周末我想带家人出去走走'}, 'medium'],
-    [{text: '帮我比较这两个解决办法'}, 'high'], [{image: disposablePhoto}, 'high']
+  assert.deepEqual(config.models, ['gpt-6.1-terra', 'gpt-6-astra']);
+  for (const [question, model, effort] of [
+    [{text: '怎么打开手机相册？'}, 'gpt-6.1-terra', 'low'], [{text: '周末我想带家人出去走走'}, 'gpt-6.1-terra', 'medium'],
+    [{text: '帮我比较这两个解决办法'}, 'gpt-6-astra', 'high'], [{image: disposablePhoto}, 'gpt-6.1-terra', 'high'],
+    [{text: '对照合同和销售承诺，找出退款条件的差别。', image: disposablePhoto}, 'gpt-6-astra', 'high'],
+    [{text: '我今早的血压是138/82'}, 'gpt-6.1-terra', 'high']
   ]) {
     const messages = [{role: 'user', ...question}];
     let calls = 0;
@@ -131,8 +134,8 @@ test('each question uses the same model, with server-selected effort and one ups
         calls++;
         assert.equal(url, 'https://aihubmix.com/v1/responses');
         const input = JSON.parse(init.body);
-        assert.equal(input.model, config.model);
-        assert.equal(input.reasoning.effort, expected);
+        assert.equal(input.model, model);
+        assert.equal(input.reasoning.effort, effort);
         assert.equal(input.store, false);
         return Response.json(question.image ? providerReply('{"text":"照片","reading":null}') : providerReply());
       }

@@ -18,6 +18,34 @@ const complexQuestion = /分析|比较|对比|权衡|利弊|详细规划|制定.
 const urgent = /胸(?:痛|口疼).{0,8}(?:厉害|严重)|喘不上气|呼吸困难|昏倒|叫不醒|突然.{0,4}(?:偏瘫|说不出话)/;
 const simpleQuestion = /你好|您好|谢谢|早上好|晚安|几点|怎么读|什么意思|怎么写|怎么念|翻译|怎么(?:打开|关闭|调大|放大|调小|设置|截图|保存)|怎么做|煮多久|在哪(?:里|儿)/;
 
+// These describe the work requested. A sensitive topic or an image on its own
+// can warrant more effort on the everyday model without changing models.
+const analysisRequests = [
+  /权衡|利弊|取舍|综合(?:考虑|判断|评估|分析)|同时考虑|深入分析|详细规划|制定.{0,8}(?:方案|计划)|分步排查/,
+  /(?:帮我|请你?|麻烦你?)(?:仔细|详细)?(?:分析|比较|对比|对照)|(?:比较|分析)(?:一下|看看|这|那|两|几|不同)|(?:对照|对比)(?:一下|看看|这|那|两|几|不同|合同|条款|承诺|方案|价格)/,
+  /(?:哪[个种家款份套项]|选哪).{0,12}(?:划算|合适|合算|省钱|更好|便宜)|(?:有无|是否|有没有|哪里|哪些地方).{0,6}(?:矛盾|冲突|不一致)/,
+  /(?:为什么|怎么解释|找出).{0,16}(?:矛盾|不一致|相反)|(?:两种|几个|这几|不同).{0,12}(?:说法|来源|证据).{0,20}(?:可信|靠谱|合理|相信)/
+];
+const condition = /如果|要是|既要|既想|算上|加上|考虑到|计入|结合/;
+const decision = /划算|合算|怎么选|该选|适合|总共|一共|总价|总成本|总费用|更好|怎么办|怎么安排/;
+const continuation = /^(?:如果|要是|假如|按刚才|沿用|再算|重算|再分析|前者|后者|第[一二三两\d]+(?:种|个|项|套))|呢[？?。！!]*$/;
+
+export function needsAdvancedReasoning(messages) {
+  // Work backwards through consecutive follow-ups, stopping at a fresh question.
+  // Only user requests can establish that the topic needs the advanced model.
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== 'user') continue;
+    const text = (message.text || '').trim();
+    if (analysisRequests.some(pattern => pattern.test(text)) || (condition.test(text) && decision.test(text))) return true;
+    if (!text || topicChange.test(text) || simpleQuestion.test(text) || urgent.test(text) ||
+        !(followUp.test(text) || continuation.test(text))) return false;
+    const prior = messages.slice(Math.max(0, i - 2), i).map(m => m.text || '').join(' ');
+    if (topics.some(pattern => pattern.test(text) && !pattern.test(prior))) return false;
+  }
+  return false;
+}
+
 export function chooseEffort(messages) {
   const current = messages.at(-1);
   const text = (current.text || '').trim();

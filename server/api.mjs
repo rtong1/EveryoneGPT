@@ -1,6 +1,7 @@
-import { chooseEffort } from '../web/conversation.js';
+import { chooseEffort, needsAdvancedReasoning } from '../web/conversation.js';
 
-const chatModel = 'gpt-6.1-terra';
+const defaultChatModel = 'gpt-6.1-terra';
+const advancedChatModel = 'gpt-6-astra';
 const gatewayBase = 'https://aihubmix.com/v1';
 const familyCookie = 'zhiban_family';
 const familyLifetime = 30 * 24 * 60 * 60;
@@ -112,9 +113,10 @@ function chatInput(body) {
   });
   if (messages.at(-1).role !== 'user') invalid('请先告诉知伴您想问什么。');
   const photo = !!body.messages.at(-1).image;
+  const advanced = needsAdvancedReasoning(body.messages);
   return {
-    model: chatModel,
-    reasoning: { effort: chooseEffort(body.messages) },
+    model: advanced ? advancedChatModel : defaultChatModel,
+    reasoning: { effort: advanced ? 'high' : chooseEffort(body.messages) },
     input: [{ role: 'developer', content: photo ? guide + '\n' + photoFormat : guide }, ...messages],
     ...(photo ? { text: { format: { type: 'json_object' } } } : {}),
     max_output_tokens: 8192, store: false,
@@ -269,7 +271,8 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
     const localKey = !!(localAccess && envKey && !env.FAMILY_ACCESS_CODE);
     const familySession = hasFamily && await hasFamilySession(request, env.FAMILY_ACCESS_CODE);
     const config = signedIn => ({
-      provider: 'aihubmix', model: chatModel, serverKeyAvailable: localKey || signedIn,
+      provider: 'aihubmix', model: defaultChatModel, models: [defaultChatModel, advancedChatModel],
+      serverKeyAvailable: localKey || signedIn,
       familyAccessEnabled: hasFamily, familyCodeRequired: hasFamily && !signedIn
     });
     if (url.pathname === '/api/config' && request.method === 'GET') {

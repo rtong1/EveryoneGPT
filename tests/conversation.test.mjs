@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseEffort, modelMessages, shouldSuggestNewChat } from '../web/conversation.js';
+import { chooseEffort, modelMessages, needsAdvancedReasoning, shouldSuggestNewChat } from '../web/conversation.js';
 
 const user = (text, image) => ({role:'user', text, image});
 const reply = text => ({role:'assistant', text});
@@ -29,6 +29,23 @@ test('short follow-ups inherit the complexity of a recent health or comparison q
   assert.equal(chooseEffort([...earlier, user('怎么打开相册？')]), 'low');
   assert.equal(chooseEffort([...earlier, user('谢谢！')]), 'low');
   assert.equal(chooseEffort([user('帮我比较这几条行程')]), 'high');
+});
+
+test('Astra follows the same decision across turns and resets on an independent question or new chat', () => {
+  const photo = [user('', 'photo'), reply('月费是59元。')];
+  const decision = [...photo, user('算上安装费、优惠到期和提前解约费，哪种划算？'), reply('要看使用多久。')];
+  const followup = [...decision, user('那如果半年后搬家呢？'), reply('半年时，第一种更便宜。')];
+  const route = (history, current) => needsAdvancedReasoning(modelMessages(history, current));
+  assert.equal(route(photo, decision[2]), true);
+  assert.equal(route(decision, followup[4]), true);
+  assert.equal(route(followup, user('三个月呢？')), true);
+  assert.equal(route([], user('三个月呢？')), false);
+  for (const fresh of [cooking, user('谢谢！'), user('', 'new-photo'), user('那怎么打开相册？'),
+    user('换个话题，这段话呢？'), user('我今天血压比较高')]) {
+    assert.equal(route(followup, fresh), false, fresh.text);
+  }
+  assert.equal(route([...decision, cooking, reply('可以先加温水。')], user('为什么呢？')), false);
+  assert.equal(route([user('这个词是什么意思？'), reply('如果要比较这两种方案，可以再问我。')], user('再说一遍呢？')), false);
 });
 
 test('only recent pairs and at most two photos reach the model; a fresh chat sends only its draft', () => {
