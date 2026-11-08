@@ -1,6 +1,7 @@
 import { chooseEffort } from '../web/conversation.js';
 
-const chatModel = 'gpt-6-astra';
+const chatModel = 'gpt-6.1-terra';
+const gatewayBase = 'https://aihubmix.com/v1';
 const familyCookie = 'zhiban_family';
 const familyLifetime = 30 * 24 * 60 * 60;
 const textEncoder = new TextEncoder();
@@ -102,8 +103,8 @@ function chatInput(body) {
       if (++imageCount > 2 || message.role !== 'user') invalid('每次对话最多携带最近的两张图片。');
       const url = checkDataURL(message.image, ['data:image/jpeg;base64', 'data:image/png;base64', 'data:image/webp;base64'], 1.5 * 1024 * 1024);
       return { role: 'user', content: [
-        { type: 'image_url', image_url: { url } },
-        { type: 'text', text: text || '请看看这张图片，告诉我最有用的信息。' }
+        { type: 'input_image', image_url: url, detail: 'auto' },
+        { type: 'input_text', text: text || '请看看这张图片，告诉我最有用的信息。' }
       ] };
     }
     if (!text) invalid('先写一句话或加一张照片吧。');
@@ -113,10 +114,10 @@ function chatInput(body) {
   const photo = !!body.messages.at(-1).image;
   return {
     model: chatModel,
-    reasoning_effort: chooseEffort(body.messages),
-    messages: [{ role: 'system', content: photo ? guide + '\n' + photoFormat : guide }, ...messages],
-    ...(photo ? { response_format: { type: 'json_object' } } : {}),
-    max_completion_tokens: 8192, store: false,
+    reasoning: { effort: chooseEffort(body.messages) },
+    input: [{ role: 'developer', content: photo ? guide + '\n' + photoFormat : guide }, ...messages],
+    ...(photo ? { text: { format: { type: 'json_object' } } } : {}),
+    max_output_tokens: 8192, store: false,
     stream: false
   };
 }
@@ -129,17 +130,17 @@ function speechInput(body) {
 }
 
 const cloudErrors = new Map([
-  [401, [401, 'key_invalid', '服务密钥无效，请在设置中检查 OpenAI 密钥。']],
+  [401, [401, 'key_invalid', '服务密钥无效，请在设置中检查 AIHubMix 密钥。']],
   [403, [403, 'provider_denied', '该密钥没有开通此项服务，请检查模型权限和账户余额。']],
   [402, [402, 'billing', '模型账户余额不足，请检查账户计费。']],
   [429, [429, 'rate_limited', '现在使用的人较多，或账户额度已用完，请稍后再试。']]
 ]);
 
-async function upstreamRequest(fetcher, url, key, body, signal) {
+async function upstreamRequest(fetcher, path, key, body, signal) {
   const multipart = body instanceof FormData;
   const headers = { Authorization: 'Bearer ' + key };
   if (!multipart) headers['Content-Type'] = 'application/json';
-  const response = await fetcher(url, {
+  const response = await fetcher(gatewayBase + path, {
     method: 'POST', headers, body: multipart ? body : JSON.stringify(body), redirect: 'error', signal
   });
   if (!response.ok) {
@@ -175,9 +176,17 @@ function validatedReading(candidate, text) {
 }
 
 function readModelText(result, type) {
-  const text = result.choices?.[0]?.message?.content;
-  if (typeof text === 'string' && text.trim()) {
-    if (type !== 'photo') return json({ text: text.trim() });
+  if (result.status !== 'completed' || !Array.isArray(result.output)) {
+    throw new ApiError(502, 'incomplete_reply', '这次没有收到完整回答，请再发一次。');
+  }
+  const parts = result.output.filter(item => item.type === 'message' && item.role === 'assistant')
+    .flatMap(item => item.content);
+  const refusal = parts.find(part => part?.type === 'refusal' && part.refusal?.trim());
+  if (refusal) return json({ text: refusal.refusal.trim() });
+  const text = parts.filter(part => part?.type === 'output_text' && typeof part.text === 'string')
+    .map(part => part.text).join('').trim();
+  if (text) {
+    if (type !== 'photo') return json({ text });
     let observation;
     try { observation = JSON.parse(text); } catch {}
     if (typeof observation?.text === 'string' && observation.text.trim()) {
@@ -255,12 +264,12 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
     if ((origin && origin !== url.origin) || request.headers.get('sec-fetch-site') === 'cross-site') {
       throw new ApiError(403, 'origin_denied', '请从知伴页面重新打开。');
     }
-    const envKey = env.OPENAI_API_KEY?.trim();
+    const envKey = env.AIHUBMIX_API_KEY?.trim();
     const hasFamily = !!(envKey && env.FAMILY_ACCESS_CODE?.length >= 12 && env.FAMILY_ACCESS_CODE?.length <= 512);
     const localKey = !!(localAccess && envKey && !env.FAMILY_ACCESS_CODE);
     const familySession = hasFamily && await hasFamilySession(request, env.FAMILY_ACCESS_CODE);
     const config = signedIn => ({
-      provider: 'openai', model: chatModel, serverKeyAvailable: localKey || signedIn,
+      provider: 'aihubmix', model: chatModel, serverKeyAvailable: localKey || signedIn,
       familyAccessEnabled: hasFamily, familyCodeRequired: hasFamily && !signedIn
     });
     if (url.pathname === '/api/config' && request.method === 'GET') {
@@ -286,14 +295,14 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
     }
     if (request.method !== 'POST' || url.pathname === '/api/config') throw new ApiError(405, 'method', '请从知伴页面发送内容。');
     const expected = request.headers.get('X-Model-Provider');
-    if (expected !== 'openai') {
-      throw new ApiError(409, 'provider_changed', '请刷新页面后，确认使用 OpenAI 问答服务。');
+    if (expected !== 'aihubmix') {
+      throw new ApiError(409, 'provider_changed', '请刷新页面后，确认使用 AIHubMix 问答服务。');
     }
     let apiKey;
     const auth = request.headers.get('authorization');
     if (auth) {
       const match = /^Bearer ([^\s,]{8,512})$/.exec(auth);
-      if (!match) throw new ApiError(401, 'key_invalid', '请在设置里重新填写 OpenAI 密钥。');
+      if (!match) throw new ApiError(401, 'key_invalid', '请在设置里重新填写 AIHubMix 密钥。');
       apiKey = match[1];
     } else if (localKey || familySession || (hasFamily && await codeMatches(env.FAMILY_ACCESS_CODE, request.headers.get('x-family-code')))) {
       if (familySession && origin !== url.origin) throw new ApiError(403, 'origin_denied', '请从知伴页面发送内容。');
@@ -315,7 +324,7 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
     const signal = upstream.signal;
     if (url.pathname === '/api/speak') {
       const text = speechInput(await readInput(request, 16000));
-      const file = await upstreamRequest(fetcher, 'https://api.openai.com/v1/audio/speech', apiKey,
+      const file = await upstreamRequest(fetcher, '/audio/speech', apiKey,
         { model: 'gpt-4o-mini-tts', input: text, voice: 'coral', response_format: 'wav' }, signal);
       return new Response(await limitedBytes(file.body, 24 * 1024 * 1024), { headers: { ...privateHeaders, 'Content-Type': 'audio/wav' } });
     }
@@ -325,16 +334,17 @@ export async function handleApi(request, env = {}, { localAccess = false, fetche
       const audio = checkDataURL(data.audio, ['data:audio/wav;base64'], 2 * 1024 * 1024);
       const bytes = Uint8Array.from(atob(audio.split(',')[1]), c => c.charCodeAt(0));
       const form = new FormData();
-      form.set('model', 'gpt-transcribe');
+      form.set('model', 'whisper-large-v3');
+      form.set('response_format', 'json');
       form.set('file', new Blob([bytes], { type: 'audio/wav' }), 'voice.wav');
-      const response = await upstreamRequest(fetcher, 'https://api.openai.com/v1/audio/transcriptions', apiKey, form, signal);
+      const response = await upstreamRequest(fetcher, '/audio/transcriptions', apiKey, form, signal);
       const result = await response.json();
       if (!result.text?.trim()) throw new ApiError(422, 'empty_audio', '这次没有听清，请再说一次。');
       return json({ text: result.text.trim() });
     }
     const body = chatInput(data);
-    const response = await upstreamRequest(fetcher, 'https://api.openai.com/v1/chat/completions', apiKey, body, signal);
-    return readModelText(await response.json(), body.response_format ? 'photo' : 'chat');
+    const response = await upstreamRequest(fetcher, '/responses', apiKey, body, signal);
+    return readModelText(await response.json(), data.messages.at(-1).image ? 'photo' : 'chat');
   } catch (error) {
     if (error instanceof ApiError) return json({ code: error.code, error: error.message }, error.status);
     if (error?.name === 'TimeoutError' || error?.name === 'AbortError') return json({ code: 'timeout', error: '等候时间有点长，请稍后再试。' }, 504);

@@ -39,12 +39,12 @@ test('a captured voice turn reaches the recognizer as mono 16 kHz PCM and releas
   assert.ok(trackStopped && contextClosed);
   const request = new Request('https://family.example/api/transcribe', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Model-Provider': 'openai', Authorization: 'Bearer test-only-key' },
+    headers: { 'Content-Type': 'application/json', 'X-Model-Provider': 'aihubmix', Authorization: 'Bearer test-only-key' },
     body: JSON.stringify({ audio })
   });
   const response = await handleApi(request, {}, {
     fetcher: async (url, init) => {
-      assert.equal(url, 'https://api.openai.com/v1/audio/transcriptions');
+      assert.equal(url, 'https://aihubmix.com/v1/audio/transcriptions');
       const bytes = Buffer.from(await init.body.get('file').arrayBuffer());
       assert.equal(bytes.toString('ascii', 0, 4), 'RIFF');
       assert.equal(bytes.readUInt16LE(22), 1);

@@ -67,8 +67,8 @@ async function allowCloud() {
   if (cloudDialog) return false;
   cloudDialog = true;
   try {
-    cloudOkay = await confirmNotice('使用智能问答', 'OpenAI 将处理您发送的问题、照片或录音，用于问答、转写和合成朗读。健康本里的其他记录保存在本机。', '同意并继续','暂时不用');
-    if (cloudOkay) setPref('cloud-consent-v2-openai','yes');
+    cloudOkay = await confirmNotice('使用智能问答', '您发送的问题、照片、录音和需要云端朗读的文字，会经 AIHubMix 转交给模型处理。健康本里的其他记录保存在本机。', '同意并继续','暂时不用');
+    if (cloudOkay) setPref('cloud-consent-v1-aihubmix','yes');
     return cloudOkay;
   } finally { cloudDialog = false; }
 }
@@ -89,7 +89,7 @@ async function api(path, data, options = {}) {
   options.signal?.addEventListener('abort',abort,{once:true});
   const timer = setTimeout(abort, path === '/api/chat' ? 135000 : 95000);
   try {
-    const headers = {'X-Model-Provider':'openai'};
+    const headers = {'X-Model-Provider':'aihubmix'};
     if (data !== undefined) headers['Content-Type'] = 'application/json';
     if (options.auth !== false) {
       if (apiKey) headers.Authorization = 'Bearer ' + apiKey;
@@ -116,16 +116,16 @@ function serviceState() {
   if (apiKey) return '正在使用本次填写的服务密钥。关闭或刷新页面会清除它。';
   if (config.serverKeyAvailable || familyCode) return '家庭问答服务已连接。';
   if (config.familyCodeRequired) return '输入家人提供的家庭服务码，就可以开始聊天。';
-  return config.provider ? '请填写 OpenAI 密钥。' : '正在读取服务配置。';
+  return config.provider ? '请填写 AIHubMix 密钥。' : '正在读取服务配置。';
 }
 function updateSetupNotice() {
   const hint=byId('home-service-setup');
   if (hint) hint.hidden=!!(apiKey || familyCode || config.serverKeyAvailable);
 }
 function applyConfig(updated) {
-  if (updated.provider !== 'openai') throw new Error('请家人更新问答服务后，再刷新页面。');
+  if (updated.provider !== 'aihubmix') throw new Error('请家人更新问答服务后，再刷新页面。');
   config = updated;
-  cloudOkay = getPref('cloud-consent-v2-openai') === 'yes';
+  cloudOkay = getPref('cloud-consent-v1-aihubmix') === 'yes';
   const family = byId('family-access');
   if (family) family.hidden = !config.familyAccessEnabled;
   if (byId('forget-family')) byId('forget-family').hidden = !config.familyAccessEnabled || (!config.serverKeyAvailable && !familyCode);
